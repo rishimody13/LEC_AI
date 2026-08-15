@@ -2,14 +2,15 @@
 
 **Updated:** 2026-08-15 · **Plan:** [PLAN.md](./PLAN.md) · **Brief:** [objectives.md](./objectives.md)
 
-Phase P0 (setup) and P1 (the warehouse world) are done. Nothing reads labels or makes
-decisions yet — that is P2 and P3, next.
+Phases P0 (setup), P1 (the warehouse world) and P2 (evidence sources) are done. All the
+evidence the agent will work from now exists. Nothing works out probabilities or makes a
+decision yet — that is P3 and P4, next.
 
 ```
 P0 setup        [####################] done
 P1 world        [####################] done
-P2 evidence     [                    ] next
-P3 belief       [                    ]
+P2 evidence     [####################] done
+P3 belief       [                    ] next
 P4 decisions    [                    ]
 P5 ledger       [                    ]
 P6 simulation   [                    ]
@@ -17,7 +18,7 @@ P7 demo screen  [                    ]
 P8 video        [                    ]
 ```
 
-**Current state:** 29 tests pass, ruff clean, mypy strict clean.
+**Current state:** 79 tests pass, ruff clean, mypy strict clean. Everything runs offline.
 
 ---
 
@@ -152,31 +153,108 @@ require ink to be dark *and* neutral in colour, since kraft is warm brown. Margi
   read the answers directly and every harm number would be worthless. The test also checks
   itself, so it cannot pass by parsing nothing.
 
+### P2 — Evidence sources
+
+**`agent/evidence.py`** — everything the agent is allowed to see. Each piece of evidence
+carries its own **symptoms**: the warning signs visible when it was produced. Nothing here
+exposes the true batch.
+
+**`services/db.py`** — SQLite schema built from the world. Services read rows; the agent
+only ever receives evidence objects, so it cannot reach through to ground truth.
+
+**`services/wms_client.py`** — the warehouse system query, with four ways to fail:
+
+| Fault | What the agent sees |
+|---|---|
+| Timeout | No evidence at all, symptom `timeout` |
+| Stale replica | A plausible but quietly incomplete answer, symptom `replica_lag`, plus the sync date so the agent can work out what is missing |
+| Duplicate rows | The same shipment twice, symptom `duplicate_rows` |
+| Contradictory rows | The same shipment naming two different batches, symptom `conflicting_rows` |
+
+The stale replica is the dangerous one and the reason case S5 works: it still answers, with
+no error. In S5 the replica last synced on 10 July, so the 19 July shipment of B-2290 is
+invisible — and the label points at exactly that batch. The two sources disagree, and the
+agent has to work out which one is broken.
+
+**`services/label_reader.py`** — reads the batch code off a carton photo.
+
+The split is deliberate: a vision model does perception, and plain code does every
+judgement the agent relies on. The model reports only what characters are legible, whether
+the code is complete, its confidence, the date, and the visual condition. Our code then
+decides whether the code is well formed, whether the check digit agrees, and which symptoms
+apply.
+
+Three readers share one interface: `CassetteLabelReader` (default, replays recorded
+readings), `UnavailableLabelReader` (the reader is down), and `ClaudeLabelReader` (live
+API, used to record).
+
+**`services/batch_registry.py`** and **`services/shipment_ledger.py`** — the paid lookups,
+£0.30 and £0.40. The ledger reads door scans, so it is genuinely independent of the
+warehouse replica — verified by a test where the stale replica is missing a shipment that
+the ledger still has. That independence is what makes it worth buying when the warehouse
+system is the suspect.
+
+**`config/scenarios/scenarios.yaml`** — the six cases plus four extra ones used only to
+prove each source can fail alone. Faults are configuration, so a seventh case needs no code
+change.
+
+### What each source now reports
+
+| Case | Label reads | Label symptoms | Warehouse says |
+|---|---|---|---|
+| S1 | `B-2293-2` | clean | B-2293 (single match) |
+| S2 | nothing | no code found, blur, date unreadable | B-2293 (single match) |
+| S3 | nothing | no code found, glare, occluded, date unreadable | B-2288, B-2293, B-2296 |
+| **S4** | **`B-2291-4`** | **clean, repacking consignee** | **B-2288, B-2290** |
+| S5 | `B-2290` | incomplete code, low confidence, glare | B-2288 only, replica lag 35 days |
+| S6 | `B-229` | incomplete code, torn, date unreadable | B-2290, B-2291 |
+
+S4 is the hero case in one row: a perfect, check-digit-valid label naming a batch the
+warehouse never sent this customer. The only warning sign is who the customer is.
+
+### The recorded label readings
+
+The six readings in `tests/cassettes/label_readings.json` were produced by a vision model
+looking at the rendered images and reporting what is genuinely legible. They are keyed by
+image content hash, so changing an image invalidates its recording and the reader fails
+loudly rather than returning a stale answer.
+
+`services/record_readings.py` re-records them against the live API when the images change.
+Everything else runs offline with no API key.
+
+Two readings worth noting:
+
+- **S5** reads `B-2290` at 0.62 confidence with the code marked incomplete — the glare sits
+  over the end, so the check digit cannot be made out. Partly readable, exactly as intended.
+- **S6** reads `B-229` at 0.93 confidence, also incomplete. High confidence in the
+  characters that survive, but a chunk of the code is physically gone. That is a different
+  failure from S5, and the symptoms distinguish them.
+
+**Model choice:** `ClaudeLabelReader` defaults to `claude-opus-5`, not the `claude-sonnet-5`
+named in the plan. Current guidance is to default to the most capable model and let the user
+downgrade deliberately rather than choosing a cheaper one on their behalf. It is a
+constructor argument, so it is a one-line change.
+
+### Tests added (50 more, 79 total)
+
+- `test_wms_client.py` — each fault produces the right evidence and the right symptom; a
+  stale replica still answers; lag under the threshold is not flagged.
+- `test_label_reader.py` — the validation half: a wrong check digit is caught, an incomplete
+  code has nothing to check, high confidence on a partial code is not a confidence problem,
+  and a perfect label from a repacking consignee is still flagged. A missing recording
+  raises rather than guessing.
+- `test_lookups.py` — the registry reveals the temporal impossibility; the ledger is
+  unaffected by a stale replica.
+- `test_scenarios.py` — every case wires up, and **each source fails on its own while the
+  other is untouched**. That pair of tests is the proof for requirement R3.
+
 ---
 
 ## Next steps
 
-### P2 — Evidence sources (next)
+### P3 — Working out probabilities (next)
 
-- [ ] Write the SQLite schema and load the world into it
-- [ ] `services/wms_client.py` — query shipments by customer and product
-- [ ] Fault injection for the warehouse system: stale replica, duplicate rows, timeout,
-      out-of-order timestamps
-- [ ] `services/label_reader.py` — read a damaged label image and return a structured
-      result: characters read, per-character confidence, check digit pass/fail, quality
-      warnings
-- [ ] Decide how the label reader runs offline. Plan is Claude vision with recorded
-      responses committed to `tests/cassettes/`, so the demo and the tests need no network
-      and no API key
-- [ ] `services/batch_registry.py` and `services/shipment_ledger.py` — the paid lookups,
-      each with a price and a small failure rate
-- [ ] `config/scenarios/*.yaml` — one file per case, naming the return, the label damage,
-      and which faults are switched on
-- [ ] Tests: each source fails on its own, with a named symptom
-
-### P3 — Working out probabilities
-
-- [ ] `agent/evidence.py` — what the agent is allowed to see
+- [x] `agent/evidence.py` — what the agent is allowed to see *(done in P2)*
 - [ ] `agent/confusion.py` — which characters look alike (`1/l/I`, `0/O/D`, `5/S`, `8/B`)
 - [ ] `agent/reliability.py` — failure rates per source per symptom, stored as counts
 - [ ] `agent/hypotheses.py` — build the candidate list, including the "none of the above"

@@ -1,0 +1,104 @@
+# One entry per test case. Faults are configuration, not code paths - adding a
+# seventh case needs no code change.
+#
+# label_reader:  cassette | unavailable
+# label_damage:  a profile name from world.labels.PROFILES
+# wms:           fault switches for the warehouse system query
+# registry / ledger: fault switches for the paid lookups
+
+S1:
+  name: Clean
+  description: Label agrees with the only shipment on record.
+  return_id: RET-S1
+  label_damage: clean
+  label_reader: cassette
+  expected_action: commit
+
+S2:
+  name: Unreadable label
+  description: Water damage destroyed the code, but only one batch was ever sent here.
+  return_id: RET-S2
+  label_damage: water_damage
+  label_reader: cassette
+  expected_action: commit
+
+S3:
+  name: Nothing to go on
+  description: Glare destroyed the code and the date, and three batches were sent here.
+  return_id: RET-S3
+  label_damage: heavy_glare
+  label_reader: cassette
+  expected_action: escalate
+
+S4:
+  name: The obvious answer is wrong
+  description: >
+    Crisp, check-digit-valid label naming a batch the warehouse never sent this
+    customer. The consignee runs a repacking line.
+  return_id: RET-S4
+  label_damage: clean
+  label_reader: cassette
+  expected_action: gather
+
+S5:
+  name: Both sources degraded
+  description: >
+    Glare over the end of the code, and the warehouse query is served by a replica
+    that last synchronised before the July shipment - so that shipment is missing
+    with no error raised.
+  return_id: RET-S5
+  label_damage: partial_glare
+  label_reader: cassette
+  wms:
+    stale_as_of: 2026-07-10
+  expected_action: gather
+
+S6:
+  name: Near-miss twins
+  description: >
+    A piece of the label is torn away; the surviving fragment fits both batches
+    this customer was sent, and the date that would settle it is gone.
+  return_id: RET-S6
+  label_damage: torn_piece
+  label_reader: cassette
+  expected_action: gather
+
+# Extra cases used only by the failure-isolation tests, to show each source can
+# fail on its own without the other one being touched.
+X-label-down:
+  name: Label reader unavailable
+  description: The reader itself is down. No image evidence at all.
+  return_id: RET-S1
+  label_damage: clean
+  label_reader: unavailable
+  expected_action: commit
+
+X-wms-down:
+  name: Warehouse system timeout
+  description: The warehouse query never comes back. The label is perfect.
+  return_id: RET-S1
+  label_damage: clean
+  label_reader: cassette
+  wms:
+    timeout: true
+  expected_action: commit
+
+X-wms-conflicting:
+  name: Contradictory warehouse rows
+  description: The same shipment comes back twice naming two different batches.
+  return_id: RET-S1
+  label_damage: clean
+  label_reader: cassette
+  wms:
+    conflicting_rows: true
+  expected_action: commit
+
+X-registry-down:
+  name: Paid lookup unavailable
+  description: The hero case, but the batch registry cannot be reached.
+  return_id: RET-S4
+  label_damage: clean
+  label_reader: cassette
+  registry:
+    unavailable: true
+  expected_action: escalate

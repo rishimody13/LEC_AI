@@ -1,0 +1,67 @@
+{
+  "491922184f634f51": {
+    "best_before": null,
+    "code_complete": false,
+    "code_text": null,
+    "confidence": 0.0,
+    "note": "Label face is water damaged and heavily blurred; the lot code area is washed out and no characters can be made out.",
+    "visual_condition": [
+      "water_damage",
+      "blur",
+      "low_contrast"
+    ]
+  },
+  "7ce32cc9ddab6e4c": {
+    "best_before": "2027-05-20",
+    "code_complete": true,
+    "code_text": "B-2293-2",
+    "confidence": 0.97,
+    "note": "Label is clean, flat and evenly lit; all printed fields are crisp.",
+    "visual_condition": [
+      "clean"
+    ]
+  },
+  "be9be29fdacc6890": {
+    "best_before": "2026-11-30",
+    "code_complete": false,
+    "code_text": "B-2290",
+    "confidence": 0.62,
+    "note": "A bright reflection sits over the end of the lot code; the first five characters are legible, the following digit is doubtful and the check digit cannot be made out. The best-before line is unaffected.",
+    "visual_condition": [
+      "glare",
+      "blur"
+    ]
+  },
+  "d9725ed0468edc65": {
+    "best_before": null,
+    "code_complete": false,
+    "code_text": null,
+    "confidence": 0.0,
+    "note": "A strong reflection covers the lot code and the best-before line; only a partial year is visible on the date and none of the lot code can be read.",
+    "visual_condition": [
+      "glare",
+      "blur",
+      "occluded"
+    ]
+  },
+  "f0c98f406a6e2173": {
+    "best_before": null,
+    "code_complete": false,
+    "code_text": "B-229",
+    "confidence": 0.93,
+    "note": "A piece of the label has been torn away exposing the carton beneath; the first five characters of the lot code are crisp, but the remaining digit, the check digit and the best-before date are physically missing.",
+    "visual_condition": [
+      "torn"
+    ]
+  },
+  "fdeb9867b6477587": {
+    "best_before": "2027-03-15",
+    "code_complete": true,
+    "code_text": "B-2291-4",
+    "confidence": 0.96,
+    "note": "Label is clean and well lit; the lot code and best-before date are sharp and unambiguous.",
+    "visual_condition": [
+      "clean"
+    ]
+  }
+}

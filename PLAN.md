@@ -566,8 +566,8 @@ agent's decisions" is something we need to demonstrate.
 | Language | Python 3.12, `uv` for dependencies | Reviewer runs `uv sync && uv run demo`, done |
 | Data validation | Pydantic v2 | Every piece of evidence is a checked contract, not a loose dictionary |
 | Database | SQLite | No setup, ships inside the repo, real SQL for the WMS and ledger |
-| Reading labels | Claude vision (`claude-sonnet-5`) on generated label images | Real reading of real images — the brief allows simulated, but this is more convincing and films better |
-| Text understanding | Claude (`claude-sonnet-5`) | Pulls facts out of handwritten condition notes |
+| Reading labels | Claude vision (`claude-opus-5`) on generated label images | Real reading of real images — the brief allows simulated, but this is more convincing and films better. Readings are recorded to a file so the demo and tests run offline |
+| Text understanding | Claude (`claude-opus-5`) | Pulls facts out of handwritten condition notes |
 | Decision logic | Plain Python + NumPy | Deterministic and testable — see §8 |
 | Simulation | NumPy + pandas | Demand, FEFO picking, reordering, forecasting |
 | Statistics | SciPy | Confidence intervals via bootstrap |
