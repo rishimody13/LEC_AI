@@ -40,7 +40,13 @@ Nothing is hardcoded. Which action wins depends on the numbers at the time.
 | **GS1** | The organisation behind barcode standards. GS1 batch codes have a **check digit** — a final digit calculated from the others, so a single typo makes the code fail validation. |
 | **QA release** | Quality Assurance release. The date a batch was cleared for sale. A batch cannot be shipped before this date — useful for spotting impossible claims. |
 | **LLM** | Large Language Model. Here: Claude, used for reading photos and free-text notes. |
-| **Bayes / posterior** | A way of updating probabilities as evidence arrives. The "posterior" is your belief after seeing the evidence. |
+| **Candidate (hypothesis)** | One possible answer we might land on, e.g. "these tins are batch `B-2288`". Every candidate carries a probability, and they add up to 1. |
+| **Prior** | The probability of a candidate *before* looking at any evidence. Ours come from shipment volumes, not guesswork. |
+| **Likelihood** | How well a candidate explains a piece of evidence. Not a probability of the candidate — a score for the evidence, assuming the candidate were true. |
+| **Bayes / posterior** | The rule for updating probabilities as evidence arrives: multiply each candidate's prior by its likelihood, then rescale so the total is 1. The result is the "posterior". |
+| **Beta distribution** | A standard way of estimating a rate (like "how often does this fail?") from a running tally of successes and failures. It also tells you how uncertain that estimate is. |
+| **Calibration** | Whether stated confidence matches reality — if the agent says 87% a hundred times, it should be right about 87 times. |
+| **Brier score** | A single number scoring calibration: the average squared gap between stated probability and what actually happened. Lower is better; 0 is perfect. |
 | **VOI** | Value Of Information. How much a piece of information is worth before you buy it. Used to decide whether paying for a lookup is worthwhile. |
 | **Data drift** | The gap between what the computer thinks is on the shelf and what is actually there. |
 | **Confidence interval** | A statistical range, e.g. "the saving is £2,800 ± £400". Used to show a result is not a fluke. |
@@ -98,7 +104,9 @@ out of order. The agent compares failure probabilities given the symptoms it can
    turns out to be zero.
 4. **Be filmable.** One screen, one take, no internet needed, same result every time.
 5. **Never corrupt the ledger.** Stock records are append-only and reversible.
-6. **Be calibrated.** When the agent says 86% sure, it should be right about 86% of the time.
+6. **Be calibrated.** When the agent says 87% sure, it should be right about 87% of the
+   time. Measured in §6.6, because if the probabilities are inflated then every cost
+   calculation built on them is wrong too.
 
 ### Not doing
 
@@ -140,7 +148,8 @@ common warehouse problem.)
 print date 12SEP25"*. That matches `B-2288`'s manufacture date. The LLM pulls this out of
 the free text.
 
-**Final belief:** `B-2288` 86%, `B-2290` 11%, something else 3%.
+**Final belief:** `B-2288` 87%, `B-2290` 11%, anything else 2%. The full arithmetic behind
+these numbers is worked through step by step in §6.5.
 
 **Why the obvious answer hurts.** Trusting the label records 84 tins as good until March
 2027 when they actually expire in September 2026 — a **166-day overstatement** — and files
@@ -251,6 +260,259 @@ compromised"* — which is the demo case in one sentence.
 For garbled text, we don't use plain edit distance. We use a **character confusion table**
 (`1↔l↔I`, `0↔O↔D`, `5↔S`, `8↔B`, `2↔Z`) so that "how likely is this misread" reflects what
 actually looks similar. Case S6 depends on this.
+
+---
+
+#### 6.1 The two terms from the diagram
+
+**"Candidate answers"** — the list of possible truths we are choosing between. In this
+problem, one candidate is a claim of the form *"these 84 tins are actually batch X, which
+expires on date Y"*. We give every candidate a probability, and those probabilities must
+add up to 1. Formally these are called *hypotheses*; we call them candidates because that
+is what they are — a shortlist of answers.
+
+The list must be **complete**, or the probabilities are meaningless. So we build it in
+four passes:
+
+| Source of candidates | Example in S4 |
+|---|---|
+| Every batch the WMS says was shipped to this customer for this product | `B-2288`, `B-2290` |
+| Whatever the label claims, even if the WMS has never heard of it | `B-2291` |
+| Batches physically stored near the picked bin (mis-picks come from neighbours) | any batch in aisle A-07 |
+| A catch-all **"none of the above"** | `other` |
+
+The catch-all matters. Without it, the agent is forced to distribute 100% of its belief
+across candidates it happens to have thought of, and it becomes overconfident about a
+wrong answer. With it, evidence that fits *nothing* on the list pushes probability into
+`other`, and a high `other` is a direct signal to escalate.
+
+**Where the LLM helps.** The first, third and fourth passes are plain database queries —
+no model needed. The LLM is used for the awkward cases:
+
+- *Reading free text.* The note *"outer sleeve re-taped, inner cases show print date
+  12SEP25"* contains a date that constrains the answer. Extracting that is language work.
+- *Proposing candidates a query would miss.* If a note mentions a different customer's
+  name, or a pallet ID from another region, the LLM can propose "this is cross-docked
+  stock from site B" as a candidate. A `SELECT` would never generate it.
+- *Judging optical plausibility.* Asking "could a smudged `B-2288` read as `B-2291`?" is a
+  perception question. The confusion table handles the common cases; the LLM handles the
+  odd ones (a torn label, a sticker over a sticker).
+
+The LLM only *adds candidates to the list*. It never assigns a probability. That split is
+deliberate — a forgotten candidate is a silent catastrophe, so we want a generous
+generator, but a model guessing "I'd say 70%" is not something we can test or defend.
+
+**"Reliability model"** — a running record of how often each evidence source lies to us,
+broken down by the warning signs visible at the time.
+
+A single overall failure rate is useless here. "The label reader is 94% accurate" tells you
+nothing about *this* label. What we need is: *given that this image is clean, the check
+digit passed, and the customer is a known repacker, how often is the label still wrong?*
+So we keep separate counters per **symptom bucket**.
+
+For each source and each bucket we store two counts: how many times it turned out right,
+and how many times it turned out wrong. The estimated failure rate is:
+
+```
+failure rate  =  (times wrong + 1) / (times wrong + times right + 2)
+```
+
+The `+1` and `+2` are there so that a bucket with no history returns 50% rather than 0% or
+a divide-by-zero, and so a bucket with 3 observations doesn't claim certainty. (This is a
+Beta distribution used as a running estimate; the spread of that distribution also gives us
+an "how sure are we about this failure rate" number, which feeds the VOI calculation.)
+Counts are updated whenever a return is later resolved to ground truth — from a human
+review, a stock count, or a customer complaint.
+
+Example buckets for the label reader:
+
+| Symptom bucket | Right | Wrong | Failure rate |
+|---|---|---|---|
+| Clean image, check digit valid, standard customer | 612 | 9 | 1.6% |
+| Clean image, check digit valid, **repacking customer** | 88 | 17 | 16.8% |
+| Glare detected, check digit failed | 14 | 61 | 80.5% |
+| Partial occlusion, confidence < 0.6 | 31 | 44 | 58.4% |
+
+And for the WMS:
+
+| Symptom bucket | Right | Wrong | Failure rate |
+|---|---|---|---|
+| Fresh read, single matching record | 1,204 | 6 | 0.6% |
+| Fresh read, several matching records | 340 | 51 | 13.0% |
+| **Replica lag > 2h, or timestamps out of order** | 22 | 47 | 68.6% |
+
+That last WMS row is what drives case S5. When both sources look shaky, the agent compares
+their failure rates *given their current symptoms* — 68.6% versus 58.4% — and leans on the
+label rather than the record. That comparison is the concrete answer to R4's "reason about
+which failure is more likely".
+
+Two things to notice. First, all of these numbers are **learned counts, not constants** —
+they live in `config/reliability.yaml`, are seeded from a synthetic history, and update as
+returns resolve. Second, the two label-reader rows at the top differ only by *who the
+customer is*, and that single fact moves the failure rate from 1.6% to 16.8%. That is the
+entire reason the demo case is solvable.
+
+#### 6.2 How the sources' failure modes enter the maths
+
+Each source has more than one way of being wrong, and they need separating because they
+have different symptoms.
+
+The physical evidence channel can be in one of three states:
+
+- **OK** — the label says what is really in the box.
+- **Misread** — the box is labelled correctly, but our reader got the characters wrong.
+  Symptoms: glare, blur, low confidence, failed check digit.
+- **Wrong label** — we read the characters perfectly, but the label does not describe the
+  contents. Causes: a reused outer box, a sticker over a sticker, a repack line.
+
+The third state is the whole trick of the demo, because **it has no symptoms**. A reused
+box has a crisp, valid, high-confidence label. Every quality check we can run passes. The
+only thing that raises suspicion is the customer's history — which is why the reliability
+model is bucketed by customer.
+
+The WMS has its own states: **OK**, **stale** (reading an out-of-date copy), **ambiguous**
+(several records match), and **unavailable** (timed out).
+
+We do not decide which state a source is in and then filter. We keep all states alive and
+weight them, so the final likelihood of a piece of evidence is:
+
+```
+P(evidence | candidate) = Σ over states  P(state | symptoms) × P(evidence | candidate, state)
+```
+
+Reading that in English: *"add up, over every way this source could be behaving, how likely
+that behaviour is given what we can see, times how likely this exact reading would be if
+that were the case."*
+
+**If a source is unavailable**, it contributes no term at all and the probabilities are
+left untouched. Missing evidence is not evidence. This matters for the "no default" rule:
+a timeout must not quietly nudge the agent toward any particular answer.
+
+#### 6.3 Bayes, in one line
+
+```
+new probability  ∝  old probability  ×  how well this candidate explains the evidence
+```
+
+Multiply each candidate's current probability by its likelihood, then divide everything by
+the total so it adds back to 1. That is the whole mechanism. Three properties are worth
+stating because they explain the agent's behaviour:
+
+- **Evidence multiplies, it doesn't overwrite.** A candidate starting at 3% that explains
+  the evidence 15× better than its rivals ends up around 32%, not 95%. A single strong
+  piece of evidence rarely settles anything on its own, which is exactly why the agent
+  buys a second one.
+- **Order doesn't matter.** Applying the label then the registry gives the same answer as
+  the reverse. So the agent can gather evidence in whatever order is cheapest.
+- **Nothing can be resurrected from zero.** If we ever set a candidate to exactly 0, no
+  future evidence can revive it. This is why we never hard-eliminate — the registry lookup
+  in S4 takes `B-2291` down to 0.1%, not to 0.
+
+#### 6.4 Where the starting probabilities come from
+
+Before any evidence, we need a prior. We take it from shipment volume, not from thin air.
+For S4 the customer received 240 units of `B-2288` in June and 120 units of `B-2290` in
+July. So `B-2288` is twice as likely a source as `B-2290`, purely on volume.
+
+We then reserve a slice of probability for "this return did not come from a shipment we
+have recorded" — mis-picks, cross-docked stock, returns of returns. Historically that is
+about 8% of returns.
+
+| Candidate | Reasoning | Prior |
+|---|---|---|
+| `B-2288` | 92% × (240 / 360) | **0.613** |
+| `B-2290` | 92% × (120 / 360) | **0.307** |
+| `B-2291` | in the building, never shipped here; mis-pick possible | **0.030** |
+| `other` | genuinely unrecorded | **0.050** |
+
+#### 6.5 Worked example: the full S4 calculation
+
+This is the arithmetic behind the demo, in three steps.
+
+**Step 1 — the label reads `B-2291`, crisp, check digit valid.**
+
+The likelihoods come from the reliability model above. The customer is a repacker, so the
+label reader's states weight as: OK 82%, misread 2%, wrong-label 16%.
+
+- If the tins really are `B-2288`: a working reader would have said `B-2288`, so the only
+  routes to a `B-2291` reading are a misread (needs two optically dissimilar character
+  changes — near impossible) or a wrong label. `B-2291` is a high-volume batch, so it
+  accounts for roughly a third of the wrong-label mass. **Likelihood ≈ 0.056.**
+- If the tins really are `B-2290`: same reasoning. **≈ 0.056.**
+- If the tins really are `B-2291`: a working reader just reads it. **≈ 0.83.**
+- If `other`: **≈ 0.05.**
+
+| Candidate | Prior | × Likelihood | = Weight | → **Probability** |
+|---|---|---|---|---|
+| `B-2288` | 0.613 | 0.056 | 0.0343 | **43.5%** |
+| `B-2290` | 0.307 | 0.056 | 0.0172 | **21.8%** |
+| `B-2291` | 0.030 | 0.830 | 0.0249 | **31.6%** |
+| `other` | 0.050 | 0.050 | 0.0025 | **3.2%** |
+
+**This is the most important number in the plan.** The label multiplied `B-2291` by more
+than ten — from 3% to 32% — and *still did not put it in the lead*. The evidence that
+looks decisive to a human is not decisive once you account for how often this particular
+customer's labels lie. No candidate is dominant, committing to any of them risks £4,000,
+and so the VOI calculation says buy the £0.30 lookup. On screen this is the moment the
+bars go flat.
+
+**Step 2 — the batch registry returns two facts.** `B-2291` was QA-released on 2026-06-28,
+*after* the June shipment left; and `B-2291` has never been allocated to this customer in
+any shipment.
+
+For `B-2291` to still be the answer, both registry facts would have to be wrong, or the
+tins reached the customer through a mis-pick that also escaped the allocation records.
+**Likelihood ≈ 0.02.** For every other candidate the registry says nothing surprising, so
+their likelihoods sit near 1 (0.95, discounted slightly because the registry itself can err).
+
+| Candidate | Prior | × Likelihood | = Weight | → **Probability** |
+|---|---|---|---|---|
+| `B-2288` | 0.435 | 0.95 | 0.4134 | **63.1%** |
+| `B-2290` | 0.218 | 0.95 | 0.2067 | **31.6%** |
+| `B-2291` | 0.316 | 0.02 | 0.0063 | **1.0%** |
+| `other` | 0.032 | 0.90 | 0.0285 | **4.4%** |
+
+`B-2291` is finished. But the agent still isn't safe: 63% versus 32% is not enough to
+commit when being wrong costs £4,032.
+
+**Step 3 — the condition note.** The LLM extracts an inner-case print date of 12 Sep 2025.
+`B-2288` was manufactured on 2025-09-12; `B-2290` on 2025-11-03.
+
+Handwritten notes are unreliable, so this evidence is suggestive rather than conclusive —
+55% if the note is right about `B-2288`, 14% chance a mistaken note would happen to name
+another batch's exact date.
+
+| Candidate | Prior | × Likelihood | = Weight | → **Probability** |
+|---|---|---|---|---|
+| `B-2288` | 0.631 | 0.55 | 0.3472 | **86.7%** |
+| `B-2290` | 0.316 | 0.14 | 0.0442 | **11.0%** |
+| `B-2291` | 0.010 | 0.05 | 0.0005 | **0.1%** |
+| `other` | 0.044 | 0.20 | 0.0087 | **2.2%** |
+
+Final answer: **`B-2288` 87%, `B-2290` 11%, anything else 2%.** The obvious answer ends up
+at one part in a thousand.
+
+Every one of these tables is what the agent writes to its decision log, so a reviewer can
+check the multiplication by hand.
+
+#### 6.6 Are the probabilities any good?
+
+A number is only useful if it means something. We check this with a **calibration test**:
+run all six cases across 200 seeds, bucket every prediction by its stated confidence, and
+compare against how often it was actually right.
+
+| Agent said | Should be right about | Acceptable range |
+|---|---|---|
+| 50–60% | 55% of the time | 45–65% |
+| 80–90% | 85% of the time | 78–92% |
+| >95% | 97% of the time | >93% |
+
+We report this as a chart plus a single **Brier score** (average squared error between
+stated probability and actual outcome — lower is better, 0 is perfect). If the agent is
+systematically overconfident, the whole cost calculation is wrong, because it multiplies
+harms by probabilities that are too extreme. This test is what stops that going unnoticed.
+
+---
 
 ### Choosing an action
 
@@ -530,7 +792,7 @@ One Streamlit page, four panes, no scrolling and no tab-switching on camera:
 | 0:18–0:38 | The label is crisp. `B-2291`, March 2027, 94% confident, check digit valid. Everything says trust it. |
 | 0:38–1:05 | The WMS shows two shipments to this customer, neither is `B-2291`. Probability bars go flat — real ambiguity. |
 | 1:05–1:32 | **The cost table.** Committing is free but risks £4k. A human costs £14 now. A £0.30 lookup is expected to avoid £2.9k of harm. The agent buys the lookup. *Hold this shot.* |
-| 1:32–1:52 | The lookup: `B-2291` was QA-released *after* the shipment left. Impossible. Belief collapses onto `B-2288` at 86%. |
+| 1:32–1:52 | The lookup: `B-2291` was QA-released *after* the shipment left. Impossible. `B-2291` drops to 1%; the condition note then pushes `B-2288` to 87%. |
 | 1:52–2:12 | Second decision: home bin vs segregate. Cost table again; commit wins, by a stated margin. |
 | 2:12–2:48 | **The counterfactual.** Rerun trusting the label: 84 tins ship ten weeks past best-before, £4,032, stock-out in week 14 — and **118 days before anyone could have noticed**. |
 | 2:48–3:00 | Two failure types, four competing actions, no default branch, one seed from reproducing. |
