@@ -1,700 +1,583 @@
-# Reconciling Inventory from Partial Returns with Conflicting Metadata — Implementation Plan
+# Plan: an agent that sorts out returned stock when the labels disagree with the computer
 
-**Repo:** `LEC_AI` · **Source brief:** [`objectives.md`](./objectives.md) · **Plan date:** 2026-08-15
-
----
-
-## 0. Executive summary
-
-We are building **RECONCILE**, an agent that processes partial stock returns in a
-distribution warehouse. Each returned carton carries physical metadata (batch code,
-best-before date, handwritten condition notes) that may contradict the warehouse
-management system (WMS). The agent must work out which source to believe, decide
-whether it is worth paying for external arbitration, and then reassign the stock to a
-physical bin — all without corrupting the inventory record.
-
-The core of the design is that **the agent does not follow a decision tree**. It
-maintains a probability distribution over candidate batch assignments, and at each
-step picks whichever action minimises *expected downstream harm* measured in pounds:
-commit to a bin now, buy more evidence, segregate under a conservative expiry, or
-escalate to a human. Those four are genuinely competing — each one wins outright in at
-least one of our scenarios, and which one wins is determined at runtime by the belief
-state and a harm cost matrix, not by hardcoded thresholds.
-
-The harm claim is not rhetorical. A downstream simulator (demand → FEFO picking →
-replenishment → forecasting, run over a 180-day horizon and 200 seeds) converts each
-assignment decision into concrete outcomes: units shipped past their real best-before
-date, write-off value, stock-out days, forecast error, and **silent-drift days** — how
-long the bad write sits undetected. We ship this as a *test that fails* if the harm
-delta collapses to zero.
-
-**Headline result the demo is built around:** in the hero scenario the crisp, high-confidence,
-checksum-valid label is *wrong*, and trusting it puts 84 units of infant formula into
-the picking queue with an expiry four months later than reality. The simulator shows
-those units shipping roughly ten weeks past their true best-before, ~118 days after the
-mistake was made, with nobody noticing in between.
+**Repo:** `LEC_AI` · **Brief:** [`objectives.md`](./objectives.md) · **Date:** 2026-08-15
 
 ---
 
-## 1. Close reading of the brief
+## 1. What we are building
 
-### 1.1 What is explicitly demanded
+A warehouse gets back part of an order — say 84 units out of 240. The boxes have labels
+on them: a batch code, a best-before date, some handwritten notes. The warehouse computer
+also has a record of what it thinks it sent that customer. Sometimes these two disagree.
 
-| # | Requirement (paraphrased) | Source line |
-|---|---|---|
-| **R1** | At least two *sequential* decisions about a single return: (a) trust embedded metadata vs system records, (b) which bin to reassign to, conditioned on (a). | Req. ¶1 |
-| **R2** | Genuinely competing strategies chosen **at runtime**, not a fixed sequence. | Req. ¶1 |
-| **R3** | Two **independently failing** components that interact: a physical-metadata reader/validator, and a warehouse-record query. | Req. ¶2 |
-| **R4** | When both fail or conflict, the agent reasons about **which failure is more likely** and acts on that — **with no fallback to a default choice**. | Req. ¶2 |
-| **R5** | Two independent failure modes handled: (a) metadata unreadable/corrupted, (b) metadata internally consistent but conflicting with *multiple plausible* warehouse records. | Task ¶, sentence 4 |
-| **R6** | Three available responses to the conflict: trust physical evidence, query external sources to arbitrate, or flag for manual review. | Task ¶, sentence 2 |
-| **R7** | Correct bin reassignment **without introducing data drift**. | Task ¶, sentence 3 |
-| **R8** | Prove the decision affects downstream correctness, with **measurable** harm (stock-out predictions, expired shipments). Harm must be **real, not hypothetical**. | Req. ¶3 |
-| **R9** | Working implementation, not a mock-up. | Task ¶, final sentence |
-| **R10** | Three-minute video showing a return **where the obvious choice is wrong**. | Task ¶, final sentence |
+Our agent, **RECONCILE**, decides who to believe and then decides which shelf to put the
+stock on. If it guesses the batch wrong, nothing breaks immediately. Months later, someone
+ships expired baby formula, or the system runs out of stock without warning. That delay is
+the whole problem: the mistake is invisible when you make it.
 
-### 1.2 Ambiguities, and how we resolve them
+The agent works by keeping a **probability for each possible answer** and picking whichever
+action costs the least in expected pounds. It has four actions available:
 
-These are the places where the brief could be read two ways. Each resolution is a
-design commitment, and each has a corresponding proof artefact (see §9).
+1. **Commit** — write the stock to a shelf now.
+2. **Gather** — pay a small fee to look up an external record and get more information.
+3. **Segregate** — put the stock in a holding area using the safest (earliest) expiry date.
+4. **Escalate** — send it to a human.
 
-**"No fallback to a default choice" (R4).** The narrow reading — never call
-`escalate_to_human()` — contradicts R6, which explicitly offers manual review as one of
-three legitimate responses. We adopt the stronger, more interesting reading: *there is
-no unconditional `else` branch anywhere in the decision path.* Every terminal action,
-including escalation, must be the arg-min of an explicit expected-cost computation over
-the current posterior, and must be logged with the losing alternatives and their costs.
-Escalation is a **chosen** action when irreducible ambiguity makes it cheapest, never an
-exception handler. We prove this by mutating the cost matrix in a test and asserting the
-chosen action changes (§9, PO-4).
-
-**"Genuinely competing strategies" (R2).** We read this as requiring that no single
-fixed policy can match the agent across the scenario suite. So the counterfactual
-harness includes fixed-policy baselines (`always-trust-label`, `always-trust-wms`,
-`always-escalate`, `always-segregate`) and we report an **aggregate across a scenario
-mix** in which each baseline is beaten by the agent, and each baseline wins on at least
-one individual scenario. If a fixed policy tied with the agent in aggregate, the
-scenario suite would be too easy and we would have failed R2 on the merits.
-
-**"Which failure is more likely" (R4).** This needs a mechanism, not a vibe. We give
-each evidence component a **calibrated reliability model**: Beta posteriors over failure
-rates, conditioned on observable *fault signatures* (OCR: glare, occlusion, checksum
-failure, low character confidence; WMS: replica lag, watermark inversion, duplicate
-records, timeout). The agent compares posterior failure probabilities of the two
-components given their signatures. This is the machinery that makes the phrase
-operational.
-
-**"Without introducing data drift" (R7).** Defined concretely as divergence between the
-recorded inventory state and physical ground truth, measured on four axes:
-batch-attribution error rate, expiry L1 error in **unit-days**, bin misplacement count,
-and *compounded* drift after subsequent pick/return cycles. Compounding is what makes
-the failure silent, so we measure and plot it over the horizon.
-
-**"Prove harm is real" (R8).** A single anecdote is not proof. Proof =
-(1) a full downstream simulator with ground truth, (2) a policy sweep over ≥200 seeds,
-(3) a reported confidence interval on the harm delta that excludes zero, and
-(4) a `pytest` assertion that fails if it does not. The test is the proof artefact.
-
-### 1.3 What the brief does *not* constrain (our freedom)
-
-- Industry vertical — we choose chilled/ambient FMCG (infant formula), because
-  best-before dates carry genuine consumer-safety weight and FEFO picking is standard.
-- Whether perception is real or simulated ("simulated or real") — we render real label
-  images and run a real vision model over them, which costs little and makes the demo
-  far more convincing than a stubbed string.
-- Agent framework — unconstrained, so we optimise for auditability (§5.2).
+Nothing is hardcoded. Which action wins depends on the numbers at the time.
 
 ---
 
-## 2. Goals and non-goals
+## 2. Acronyms and terms
 
-### 2.1 Primary goals
-
-- **G1 — Decide well under uncertainty.** Beat every fixed policy on aggregate expected
-  harm across the scenario suite.
-- **G2 — Be auditable.** Every decision emits a structured trace: hypotheses,
-  likelihoods, posterior, candidate actions, each action's expected cost, the winner,
-  and the margin. A reviewer can reconstruct any decision without rerunning the agent.
-- **G3 — Prove the harm.** Ship a reproducible counterfactual harness with CIs and a
-  failing-if-untrue test.
-- **G4 — Be filmable.** A single-screen demo that shows belief updating and cost
-  comparison live, in one take, deterministically.
-
-### 2.2 Secondary goals
-
-- **G5 — Never silently corrupt the ledger.** Append-only, idempotent, reversible writes.
-- **G6 — Calibration over confidence.** The agent's stated 0.86 should be right ~86% of
-  the time; we measure this with a reliability diagram and Brier score across seeds.
-- **G7 — Cost-awareness.** Arbitration API calls and human reviews are priced and
-  budgeted; the agent must not buy evidence it does not need.
-
-### 2.3 Explicit non-goals
-
-- Not a production WMS integration (SAP EWM / Manhattan connectors are out of scope).
-- Not a general-purpose OCR research contribution — we use an off-the-shelf vision model.
-- Not multi-warehouse or multi-echelon network optimisation.
-- Not a UI product; the demo surface exists to serve the video and the reviewer.
-- Not real-time/streaming — returns are processed as discrete cases.
+| Term | Meaning |
+|---|---|
+| **WMS** | Warehouse Management System. The computer that tracks what stock is where. The "system of record". |
+| **SKU** | Stock Keeping Unit. A product code, e.g. `SKU-4471` for a particular tin of formula. |
+| **Batch** | One production run of a product. All units in a batch share a manufacture date and a best-before date. |
+| **Bin** | A physical shelf location, e.g. `A-07-02`. |
+| **FEFO** | First Expired, First Out. Standard warehouse picking rule: always ship the stock that expires soonest. This is why a wrong expiry date is dangerous — it changes what gets picked. |
+| **OCR** | Optical Character Recognition. Reading text out of a photo. |
+| **GS1** | The organisation behind barcode standards. GS1 batch codes have a **check digit** — a final digit calculated from the others, so a single typo makes the code fail validation. |
+| **QA release** | Quality Assurance release. The date a batch was cleared for sale. A batch cannot be shipped before this date — useful for spotting impossible claims. |
+| **LLM** | Large Language Model. Here: Claude, used for reading photos and free-text notes. |
+| **Bayes / posterior** | A way of updating probabilities as evidence arrives. The "posterior" is your belief after seeing the evidence. |
+| **VOI** | Value Of Information. How much a piece of information is worth before you buy it. Used to decide whether paying for a lookup is worthwhile. |
+| **Data drift** | The gap between what the computer thinks is on the shelf and what is actually there. |
+| **Confidence interval** | A statistical range, e.g. "the saving is £2,800 ± £400". Used to show a result is not a fluke. |
+| **CI (build)** | Continuous Integration. Automated tests that run on every code push. |
+| **API** | Application Programming Interface. Here: an external service the agent can call for a fee. |
+| **Seed** | A number that makes random simulations repeatable. Same seed, same result. |
 
 ---
 
-## 3. Domain model and the hero scenario
+## 3. What the brief asks for
 
-### 3.1 Entities
+| # | Requirement |
+|---|---|
+| **R1** | Two decisions in sequence about one return: first *who to believe*, then *which bin*. The second depends on the first. |
+| **R2** | The agent picks between real alternatives at runtime. Not a fixed script. |
+| **R3** | Two components that can fail independently: one reads the physical label, one queries the WMS. |
+| **R4** | When both fail or disagree, work out **which one is more likely to be broken** — with no default fallback. |
+| **R5** | Handle two failure types: (a) the label is unreadable, (b) the label is perfectly readable but contradicts several plausible WMS records. |
+| **R6** | Three possible responses: trust the label, pay to check an external source, or send to a human. |
+| **R7** | Assign the stock to a bin without causing data drift. |
+| **R8** | Prove the decision matters, with real measured harm. Not hypothetical. |
+| **R9** | Working code, not a mock-up. |
+| **R10** | A 3-minute video showing a return where the obvious answer is wrong. |
 
-- **SKU** — `SKU-4471`, *NutriPlus Infant Formula 800g*, unit cost £11.40.
-- **Batch** — id, manufacture date, QA-release date, best-before date, home bin, quantity on hand.
-- **Bin** — id, zone, capacity, temperature class, status (`active` / `quarantine` / `hold`).
-- **Order / Shipment** — customer, lines, allocated batch, dispatch timestamp.
-- **Return** — customer, SKU, quantity, arrival timestamp, carton images, condition notes.
-- **Inventory ledger** — append-only, signed movements; the system of record we must not drift.
+### Three tricky bits, and how we read them
 
-### 3.2 Batch fixtures for the hero case (today = 2026-08-15)
+**"No fallback to a default choice."** Read narrowly this would mean "never escalate to a
+human" — but R6 explicitly lists human review as a valid response, so that reading is
+wrong. We take it to mean: **there is no `else` branch in the code.** Every final action,
+including escalation, must be the cheapest option out of an explicit costed list, and the
+losing options must be logged with their costs. Escalation is a *choice*, not an error
+handler.
 
-| Batch | Manufactured | QA released | Best before | Home bin | On hand |
+**"Genuinely competing strategies."** We test this by building four dumb fixed policies
+(always trust the label, always trust the WMS, always escalate, always segregate) and
+running them against the agent. Two things must be true: the agent beats all four overall,
+**and** each fixed policy beats the agent on at least one individual case. If no fixed
+policy ever won, our test cases would be too easy and the agent's flexibility would be
+pointless.
+
+**"Which failure is more likely."** This needs a real mechanism. Each component gets a
+**reliability model**: a running estimate of how often it fails, broken down by
+*symptom*. The label reader has symptoms like glare, blocked view, or a failed check
+digit. The WMS has symptoms like a slow replica, duplicate rows, or timestamps that are
+out of order. The agent compares failure probabilities given the symptoms it can see.
+
+---
+
+## 4. Goals
+
+1. **Decide well.** Beat every fixed policy on total cost across all test cases.
+2. **Show your work.** Every decision logs the options, their costs, the winner, and by
+   how much. A reviewer can check a decision without rerunning anything.
+3. **Prove the harm.** A simulation with real numbers and a test that fails if the harm
+   turns out to be zero.
+4. **Be filmable.** One screen, one take, no internet needed, same result every time.
+5. **Never corrupt the ledger.** Stock records are append-only and reversible.
+6. **Be calibrated.** When the agent says 86% sure, it should be right about 86% of the time.
+
+### Not doing
+
+- No real WMS integration (SAP, Manhattan, etc.).
+- No OCR research — we use an off-the-shelf vision model.
+- No multi-warehouse network planning.
+- Not a polished product. The interface exists to serve the video.
+
+---
+
+## 5. The demo case: where the obvious answer is wrong
+
+Product: `SKU-4471`, infant formula, £11.40 a tin. Today is 2026-08-15.
+
+| Batch | Made | QA released | Best before | Home bin |
+|---|---|---|---|---|
+| `B-2288` | 2025-09-12 | 2025-09-19 | **2026-09-30** (46 days away) | `A-07-02` |
+| `B-2290` | 2025-11-03 | 2025-11-10 | 2026-11-30 | `A-07-05` |
+| `B-2291` | 2026-01-20 | **2026-06-28** | **2027-03-15** | `C-04-01` |
+
+Customer `CUST-118` returns 84 tins out of an order of 240.
+
+**What the agent sees first.** The label is clean and well-lit. It reads `B-2291`, best
+before 2027-03-15. Character confidence 0.94. Check digit valid. Date format valid.
+Everything about it says *trust me*. **This is the obvious choice, and it is wrong.**
+
+**The conflict.** The WMS shows two shipments to this customer for this product:
+one in June from batch `B-2288`, one in July from batch `B-2290`. Neither is `B-2291`.
+The label is internally perfect but contradicts two plausible records — exactly failure
+type (b) from R5.
+
+**The tell.** If the agent pays £0.30 to check the batch registry, it learns that
+`B-2291` was QA-released on 2026-06-28 — *after* the June shipment left the building. It
+is physically impossible for that batch to be in that shipment. The label is genuine, but
+it is stuck to a reused outer box from the customer's own repacking line. (A real and
+common warehouse problem.)
+
+**The confirmation.** The handwritten note says *"outer sleeve re-taped, inner cases show
+print date 12SEP25"*. That matches `B-2288`'s manufacture date. The LLM pulls this out of
+the free text.
+
+**Final belief:** `B-2288` 86%, `B-2290` 11%, something else 3%.
+
+**Why the obvious answer hurts.** Trusting the label records 84 tins as good until March
+2027 when they actually expire in September 2026 — a **166-day overstatement** — and files
+them in the wrong zone. Because FEFO picks the earliest expiry first, these tins sit
+untouched for months. Then:
+
+- They get picked around day 120 and ship **roughly ten weeks past their real best-before**.
+  At £48 per unit for recall, replacement and admin, that is **£4,032** from one return.
+- Meanwhile `B-2288`'s real stock count is 84 tins short, so the rotation warning never
+  fires, and 84 phantom long-dated tins make future availability look better than it is.
+  Result: a **stock-out in week 14** that the forecast never saw.
+- The mistake happens on day 0. The first visible symptom is on day 118. **118 days of
+  silence.** This is the number the video ends on.
+
+### The six test cases
+
+| ID | Situation | Label | WMS | Right answer | Why it's in the suite |
 |---|---|---|---|---|---|
-| `B-2288` | 2025-09-12 | 2025-09-19 | **2026-09-30** (46 days out) | `A-07-02` | 1,120 |
-| `B-2290` | 2025-11-03 | 2025-11-10 | 2026-11-30 | `A-07-05` | 780 |
-| `B-2291` | 2026-01-20 | **2026-06-28** | **2027-03-15** | `C-04-01` | 2,400 |
-
-### 3.3 The hero scenario — "S4: the obvious choice is wrong"
-
-Customer `CUST-118` (a regional distributor) ordered 240 units and is returning **84** —
-a genuine partial return. What the agent sees:
-
-1. **Physical evidence.** The carton label is clean and well-lit. Vision read:
-   `B-2291`, best before `2027-03-15`. Character confidence 0.94, GS1-style check digit
-   **valid**, date format **valid**, internally **fully consistent**. Every surface
-   signal says trust it. This is the obvious choice.
-2. **System records.** The WMS has *two* plausible outbound shipments to `CUST-118` for
-   this SKU: `SH-77120` (2026-06-02, drew from `B-2288`) and `SH-77455` (2026-07-19,
-   drew from `B-2290`). **Neither is `B-2291`.** This is failure mode (b) from R5:
-   the metadata is internally consistent but conflicts with multiple plausible records.
-3. **The tell, available only if the agent pays for it.** The batch registry shows
-   `B-2291` was released from QA hold on **2026-06-28** — *after* `SH-77120` shipped —
-   and has never been allocated to `CUST-118`. A **temporal impossibility**. The label is
-   genuine but belongs to a reused outer sleeve from the customer's own repack line.
-4. **The corroborator.** The free-text condition note reads
-   *"outer sleeve re-taped, inner cases show print date 12SEP25"* — which matches
-   `B-2288`'s manufacture date of 2025-09-12. This is unstructured text that the LLM
-   layer extracts and the belief layer scores.
-
-**Resulting posterior:** `B-2288` 0.86 · `B-2290` 0.11 · other 0.03.
-
-**Why it hurts if you trust the label.** 84 units get recorded with a best-before of
-2027-03-15 when the truth is 2026-09-30 — a **166-day** expiry overstatement, and they
-are filed in the wrong zone (`C-04-01` instead of `A-07-02`). FEFO picking will not
-touch them for months. Two harms follow:
-
-- **Safety/compliance:** the units are picked around simulator day ~120 and ship roughly
-  **ten weeks past their real best-before date**. At £48/unit recall-and-replace
-  exposure, that is **~£4,032** on a single return.
-- **Availability:** `B-2288`'s true on-hand is understated by 84 units, so the
-  near-expiry rotation trigger never fires, while 84 phantom long-dated units inflate
-  late-horizon availability — producing a **stock-out in week 14** that the forecast did
-  not see coming.
-- **Silence:** the write happens on day 0; the first externally visible symptom is on
-  day ~118. **118 silent-drift days.** This is the number the video ends on.
-
-### 3.4 Full scenario suite
-
-| ID | Name | OCR state | WMS state | Correct action | What it proves |
-|---|---|---|---|---|---|
-| **S1** | Clean | valid, high conf | single unambiguous match | `COMMIT` home bin | Agent doesn't over-escalate or waste money on arbitration |
-| **S2** | Corrupted label | glare, checksum fails | single unambiguous match | `COMMIT` on WMS | Failure mode (a); acts decisively without physical evidence |
-| **S3** | Fog of war | unreadable | 3 open orders, 3 batches | `ESCALATE` | Escalation as a *chosen* least-cost action, not a fallback |
-| **S4** | **Hero — obvious choice is wrong** | valid, high conf | 2 plausible, neither matches | `GATHER` → `COMMIT` `B-2288` | Failure mode (b); R10 |
-| **S5** | Both degraded | 0.55 conf, partial read | stale replica, watermark inversion | down-weight WMS, `GATHER` ledger | R4 — reasoning about *which* component failed |
-| **S6** | Near-miss twins | one-char corruption, **checksum valid for two batches** | both batches plausible | `GATHER`, then `SEGREGATE` | Residual uncertainty handled by conservative expiry, not a coin flip |
-
-S1–S6 also form the aggregate mix used for the fixed-policy comparison (§8.3).
+| **S1** | Clean | fine | one clear match | Commit | Agent shouldn't escalate or spend money when it's obvious |
+| **S2** | Unreadable label | glare, check digit fails | one clear match | Commit on WMS | Failure type (a) |
+| **S3** | Nothing to go on | unreadable | 3 open orders, 3 batches | Escalate | Escalation chosen because it's genuinely cheapest |
+| **S4** | **The demo case** | perfect but wrong | 2 plausible, neither matches | Gather, then commit to `B-2288` | Failure type (b), and R10 |
+| **S5** | Both broken | 55% confidence, partial | stale replica, timestamps out of order | Distrust the WMS, gather | R4 — working out which one failed |
+| **S6** | Near-miss twins | one character off, **check digit valid for two different batches** | both plausible | Gather, then segregate | Leftover uncertainty handled safely rather than by coin flip |
 
 ---
 
-## 4. Architecture
-
-### 4.1 Layer diagram
+## 6. How it works
 
 ```mermaid
 flowchart TB
-    subgraph W["1 · World / Fixtures (ground truth, seeded)"]
-        WG["Generators: SKUs, batches,\nbins, orders, shipments, returns"]
-        LR["Label renderer + corruptor\n(Pillow: glare, blur, smear,\nocclusion, char confusion)"]
+    subgraph W["World (ground truth — the agent cannot see this)"]
+        WG["Seeded batches, bins,\norders, shipments, returns"]
+        LBL["Label image generator\n+ damage effects"]
     end
 
-    subgraph E["2 · Evidence layer — independently failable"]
-        P["LabelReader (perception)\nvision model + validators\nfaults: glare, occlusion,\nchecksum fail, low conf"]
-        R["WMSClient (records)\nfaults: timeout, stale replica,\npartial index, duplicates"]
+    subgraph E["Evidence sources — each can fail on its own"]
+        P["Label reader\nvision model + checks"]
+        R["WMS query"]
     end
 
-    subgraph A["3 · Arbitration services — priced, optional"]
-        BR["BatchRegistry\nmfg/QA dates, GS1"]
-        SL["ShipmentLedger\nwhat actually left the door"]
-        SUP["SupplierAPI"]
+    subgraph A["Paid lookups"]
+        BR["Batch registry\n(made / QA-released dates)"]
+        SL["Shipment ledger\n(what actually left)"]
     end
 
-    subgraph C["4 · Agent core"]
-        REL["ReliabilityModel\nBeta posteriors per\ncomponent × fault signature"]
-        HYP["HypothesisEngine\nLLM-assisted candidate\ngeneration + note extraction"]
-        BEL["BeliefUpdater\nBayes; source-fault as\nnuisance variable"]
-        POL["DecisionPolicy\nexpected-cost arg-min over\nCOMMIT / GATHER /\nSEGREGATE / ESCALATE\n+ myopic VOI"]
-        HM["HarmModel\ncost matrix in £"]
+    subgraph C["Agent"]
+        REL["Reliability model\nhow often each source fails,\nby symptom"]
+        HYP["Candidate answers\n(LLM helps generate)"]
+        BEL["Belief update\nprobability per answer"]
+        POL["Action chooser\ncosts Commit / Gather /\nSegregate / Escalate,\npicks cheapest"]
+        HM["Cost table (£)"]
     end
 
-    subgraph O["5 · Commit + verification"]
-        LED["Append-only inventory ledger\nidempotent, reversible"]
-        DD["DriftDetector\nledger vs ground truth"]
+    subgraph O["Writing it down"]
+        LED["Stock ledger\nappend-only, reversible"]
+        DD["Drift check\nledger vs ground truth"]
     end
 
-    subgraph D["6 · Downstream proof"]
-        SIM["Simulator\ndemand → FEFO pick →\nreplenish → forecast"]
-        CF["CounterfactualHarness\npolicy sweep × 200 seeds, CIs"]
-    end
-
-    subgraph V["7 · Presentation"]
-        UI["Streamlit demo\ncarton, belief bars,\ncost table, harm charts"]
-        TR["JSON decision trace"]
+    subgraph D["Proof"]
+        SIM["180-day simulation\ndemand, FEFO picking,\nreordering, forecasting"]
+        CF["Compare agent vs\n4 fixed policies, 200 seeds"]
     end
 
     WG --> R
-    LR --> P
+    LBL --> P
     P --> BEL
     R --> BEL
     REL --> BEL
     HYP --> BEL
     BEL --> POL
     HM --> POL
-    POL -- "GATHER" --> A
+    POL -- Gather --> A
     A --> BEL
-    POL -- "COMMIT / SEGREGATE" --> LED
-    POL -- "ESCALATE" --> TR
+    POL -- "Commit / Segregate" --> LED
     LED --> DD
-    WG -.ground truth.-> DD
+    WG -.-> DD
     DD --> SIM
     SIM --> CF
-    CF --> UI
-    POL --> TR
-    TR --> UI
 ```
 
-### 4.2 The two sequential decisions (R1)
+### The two decisions (R1)
 
-**Decision 1 — evidential stance.** Given `LabelEvidence` and `RecordEvidence`, form a
-posterior over candidate batch identities. The *action* chosen here is one of:
+**Decision 1 — who do we believe?** Combine the label and the WMS record into a
+probability for each candidate batch. Then pick: trust the label, trust the WMS, pay for
+a lookup, or escalate. If it pays for a lookup, the new evidence feeds back in and the
+decision runs again — capped at 3 lookups or £2.50 per return.
 
-- `TRUST_PHYSICAL` — commit on the label's claim,
-- `TRUST_RECORDS` — commit on the WMS claim,
-- `GATHER(tool)` — pay for arbitration (registry / ledger / supplier),
-- `ESCALATE` — hand to a human.
+**Decision 2 — which bin?** This uses the probabilities that Decision 1 produced:
 
-`GATHER` loops back into the belief update, so Decision 1 may iterate (bounded by a
-budget, §4.5). This is where the "trust physical / arbitrate / manual review" triad from
-R6 lives.
+- **Commit to home bin** — merge into the batch's normal shelf. Cheap, but expensive if wrong.
+- **Segregate** — holding area, recorded with the *earliest* plausible expiry. Safe, but
+  wastes shelf life and ties up a bin.
+- **Quarantine** — physically isolate for inspection.
+- **Escalate** — write nothing.
 
-**Decision 2 — bin assignment**, conditioned on the posterior that Decision 1 produced:
+There's a middle band of confidence where segregating beats committing. That band is
+**not a hardcoded threshold** — it falls out of the cost table. Make expired shipments
+more expensive and the band widens automatically. We test exactly this.
 
-- `COMMIT_HOME(batch)` — merge into the batch's home bin, asserting full confidence.
-  Optimal when the posterior is concentrated. Cheap, but wrong-assignment cost is high.
-- `SEGREGATE(conservative_expiry)` — place in a hold bin, record expiry as
-  `min(plausible expiries weighted by posterior)`. Safe on the compliance axis, but
-  wastes shelf life and blocks the bin. Optimal in the mid-confidence band.
-- `QUARANTINE` — physically isolate pending human inspection.
-- `ESCALATE` — do not write to the ledger at all.
+### Working out the probabilities
 
-The mid-confidence band where `SEGREGATE` wins is **not hardcoded**. It emerges from the
-harm cost matrix: as expired-shipment cost rises relative to shelf-life waste, the band
-widens. PO-4 (§9) tests exactly this.
+Standard Bayes, with one addition: **whether each source is broken is itself part of the
+calculation**, rather than a yes/no filter applied beforehand. That is what lets the agent
+say *"the label is perfectly legible, but the process that produced it is probably
+compromised"* — which is the demo case in one sentence.
 
-### 4.3 Belief update
+For garbled text, we don't use plain edit distance. We use a **character confusion table**
+(`1↔l↔I`, `0↔O↔D`, `5↔S`, `8↔B`, `2↔Z`) so that "how likely is this misread" reflects what
+actually looks similar. Case S6 depends on this.
 
-Hypotheses `H = (batch, expiry, quantity_split)`. Evidence `E = {label, records, arbitration…}`.
+### Choosing an action
 
-```
-P(H | E) ∝ P(H) · Π_s P(E_s | H, F_s) · P(F_s | signature_s)
-```
-
-where `F_s` is the latent fault state of source `s`. Treating source failure as an
-explicit nuisance variable — rather than as a hard filter — is what lets the agent say
-*"the label is legible but the source that produced it is likely compromised"*, which is
-precisely the hero case. Marginalising over `F_s` gives the "which failure is more
-likely" reasoning demanded by R4, in closed form and fully loggable.
-
-Likelihood for OCR corruption uses an explicit **character confusion matrix**
-(`1↔l↔I`, `0↔O↔D`, `5↔S`, `8↔B`, `2↔Z`) so that edit distance between the read string and
-a candidate batch code is weighted by *optical* plausibility, not raw Levenshtein. S6
-depends on this.
-
-### 4.4 Decision policy
-
-For each candidate action `a`:
+For each action:
 
 ```
-EC(a) = Σ_H P(H | E) · Harm(a, H) + Cost(a)
+expected cost = Σ (probability of each answer × harm if we take this action and that answer is true)
+              + direct cost of the action
 ```
 
-`Harm(a, H)` comes from the cost matrix (§4.6). `Cost(a)` is the direct cost — API fee
-and latency for `GATHER`, analyst time for `ESCALATE`, bin-occupancy and shelf-life
-waste for `SEGREGATE`, zero for `COMMIT`.
+Direct cost means: the API fee for a lookup, 20 minutes of analyst time for escalation,
+wasted shelf life for segregation, nothing for committing.
 
-For `GATHER`, we compute a **myopic expected value of sample information**: simulate the
-tool's possible returns under the current posterior, compute the post-update best action
-for each, and take the expectation. `GATHER` is chosen only when the expected harm
-reduction exceeds the tool's price. This is what stops the agent buying evidence in S1.
+For **Gather**, we first work out the VOI: simulate what the lookup might return, work out
+what we'd do in each case, and see how much harm that avoids on average. We only pay if
+the saving beats the fee. This is what stops the agent buying information in case S1.
 
-The policy returns `argmin_a EC(a)` with an explicit tie-break on direct cost, and
-**asserts** at runtime that the action set was non-empty and the arg-min was computed —
-there is no `else: return COMMIT`. Every decision logs the full `EC` table.
+The chooser returns the cheapest action, breaks ties on direct cost, and **asserts** that
+it actually computed a comparison. There is no `return COMMIT` at the bottom.
 
-### 4.5 Budgets and termination
+### Cost table (in `config/harm.yaml`, all tunable)
 
-- Max 3 `GATHER` calls per return; max £2.50 arbitration spend per return.
-- Loop terminates when the policy selects a terminal action, or budget is exhausted —
-  at which point the policy re-runs over the terminal actions only (still an arg-min,
-  still not a default).
-- Hard wall-clock cap of 45s per return for the live demo.
+| Outcome | Cost |
+|---|---|
+| Unit shipped past its real best-before | £48.00 each |
+| Good stock thrown away unnecessarily | £11.40 each |
+| Stock-out | £6.00 per unit per day |
+| Shelf life wasted by conservative expiry | £0.04 per unit per day |
+| Human review | £14.00 per return |
+| Paid lookup | £0.10–£0.40 |
+| Stock filed in the wrong zone | £2.20 |
 
-### 4.6 Harm cost matrix (initial values, tunable via config)
-
-| Outcome | Unit cost | Note |
-|---|---|---|
-| Unit shipped past true best-before | £48.00 / unit | recall, replacement, admin, goodwill |
-| Premature write-off (usable stock binned) | £11.40 / unit | unit cost |
-| Stock-out | £6.00 / unit-day | lost margin + expedite |
-| Shelf-life waste from conservative expiry | £0.04 / unit-day | opportunity cost |
-| Human review | £14.00 / return | 20 min analyst time |
-| Arbitration API call | £0.10–£0.40 | per service |
-| Bin misplacement (pick-path inefficiency) | £2.20 / event | |
-
-These are declared in `config/harm.yaml`, and the fact that decisions *move* when this
-file changes is a proof obligation, not a nice-to-have.
+These live in a config file, not in the code, because "changing these numbers changes the
+agent's decisions" is something we need to demonstrate.
 
 ---
 
-## 5. Stack
+## 7. Stack
 
-### 5.1 Chosen stack
-
-| Concern | Choice | Why |
+| Part | Choice | Why |
 |---|---|---|
-| Language / runtime | **Python 3.12**, `uv` for env + lockfile | Fast, reproducible installs; reviewer can run `uv sync && uv run demo` |
-| Data models | **Pydantic v2** | Runtime validation at every service boundary; evidence objects are contracts, not dicts |
-| Persistence | **SQLite** (`sqlite3` + light repository layer) | Self-contained, zero setup, real SQL for WMS/registry/ledger; ships in the repo |
-| Perception | **Claude vision** (`claude-sonnet-5`) over Pillow-rendered carton images | Real perception on real (synthetic) images satisfies "simulated or real" honestly, and films well |
-| Structured reasoning | **Claude** (`claude-sonnet-5`, `claude-opus-5` for hypothesis generation) via Anthropic SDK, tool-calling loop | Handles unstructured condition notes and corruption plausibility |
-| Decision core | Hand-written NumPy/pure-Python Bayes + expected-cost policy | Deterministic, unit-testable, auditable — see §5.2 |
-| Simulation | **NumPy + pandas** | Demand generation, FEFO picking, exponential-smoothing forecast |
-| Stats | **SciPy** (bootstrap CIs) | Harm-delta confidence intervals |
-| Label rendering | **Pillow** | Renders labels then applies parameterised corruption |
-| Demo UI | **Streamlit** | One screen, one take, fast to build; charts + images + live state in ~200 LOC |
-| Trace viewer | Structured JSON + **Rich** console renderer | Terminal traces film well and are diffable in CI |
-| Testing | **pytest**, **Hypothesis** (property tests on ledger invariants) | Ledger conservation laws are exactly what property testing is for |
-| Determinism | Seeded RNG everywhere; LLM temp 0 + **recorded response cassettes** | The demo must not flake on camera or in CI |
-| Lint/format | **ruff**, **mypy --strict** on `agent/` | |
-| CI | GitHub Actions: lint, types, tests, counterfactual harness (reduced seeds) | The harm assertion runs on every push |
-
-### 5.2 The central design choice: hybrid LLM + deterministic decision core
-
-**Decision.** The LLM does *perception and interpretation*. The deterministic core makes
-*decisions*.
-
-Specifically, the LLM is responsible for: reading the carton image, extracting structured
-claims from free-text condition notes, proposing candidate hypotheses a rigid enumerator
-would miss, and judging whether a garbled string is a plausible optical corruption of a
-given batch code. The deterministic core is responsible for: the belief update, the VOI
-calculation, the expected-cost comparison, and the final action selection.
-
-**Why.** Three reasons, in order of weight:
-
-1. **Auditability.** R2 and R4 demand we *demonstrate* that competing strategies were
-   weighed and that no default was taken. A logged `EC` table with four rows and a
-   margin is a demonstration. "The model decided" is not.
-2. **Testability.** We can unit-test the policy across the full belief simplex and assert
-   properties (monotonicity of `SEGREGATE` band in expired-shipment cost, no action
-   dominance). You cannot do that to a prompt.
-3. **Determinism for R10.** The video must reproduce. A sampled decision path is a
-   liability on camera.
-
-**Trade-off accepted.** A fully LLM-driven ReAct agent would be faster to build and
-arguably more "agentic" in the fashionable sense. We lose some of that headline. We
-mitigate by keeping genuine agency where it belongs — **the agent still chooses which
-tools to call, when to stop gathering, and whether to escalate**, and those choices vary
-across scenarios in the trace. Agency is in the control flow, which we can prove, rather
-than in the token stream, which we cannot.
-
-**Rejected alternatives:**
-
-- *Pure LLM ReAct loop.* Rejected: non-reproducible decisions, no defensible proof of R4.
-- *Pure rules engine.* Rejected: cannot handle free-text notes or optical corruption
-  plausibility; would also make R2 ("not a fixed sequence") indefensible.
-- *LangGraph / CrewAI orchestration.* Rejected: framework overhead buys us little for a
-  single-agent loop with four actions, and obscures the decision logic we most need to
-  put on screen.
-- *Postgres + Docker Compose.* Rejected: setup friction for a reviewer; SQLite is
-  sufficient and the repo stays `git clone && uv run`.
-- *Real OCR (Tesseract).* Kept as an optional second reader behind an interface — useful
-  as a disagreeing perception source, but not on the critical path.
-
-### 5.3 Other notable design choices
-
-- **Append-only ledger with reversible transactions.** Every write is a signed movement
-  with a `causation_id` pointing at the decision trace that produced it. Nothing is ever
-  updated in place, so drift is always attributable and always undoable. This is how we
-  satisfy R7 in a way that survives inspection.
-- **Fault injection as configuration, not code.** Each evidence component takes a
-  `FaultProfile`; scenarios are YAML. Adding a seventh scenario requires no code change,
-  which matters when we are tuning the demo the night before filming.
-- **Cost matrix in a config file, not constants.** Makes PO-4 (decisions move when costs
-  move) a one-line test rather than a refactor.
-- **Ground truth is held by the world layer and is unreachable from the agent.** Enforced
-  by module boundary + a test that greps the agent package for ground-truth imports. Without
-  this, every harm number is suspect.
+| Language | Python 3.12, `uv` for dependencies | Reviewer runs `uv sync && uv run demo`, done |
+| Data validation | Pydantic v2 | Every piece of evidence is a checked contract, not a loose dictionary |
+| Database | SQLite | No setup, ships inside the repo, real SQL for the WMS and ledger |
+| Reading labels | Claude vision (`claude-sonnet-5`) on generated label images | Real reading of real images — the brief allows simulated, but this is more convincing and films better |
+| Text understanding | Claude (`claude-sonnet-5`) | Pulls facts out of handwritten condition notes |
+| Decision logic | Plain Python + NumPy | Deterministic and testable — see §8 |
+| Simulation | NumPy + pandas | Demand, FEFO picking, reordering, forecasting |
+| Statistics | SciPy | Confidence intervals via bootstrap |
+| Label images | Pillow | Draws the label, then adds glare, blur, smudges, occlusion |
+| Demo screen | Streamlit | One page, ~200 lines, shows image + probabilities + costs + charts |
+| Testing | pytest, Hypothesis | Hypothesis is for property tests — e.g. "units in must equal units out, always" |
+| Repeatability | Fixed seeds, LLM temperature 0, recorded responses | The demo must not vary between takes |
+| Quality | ruff, mypy strict on the agent package | |
+| Build CI | GitHub Actions | The harm test runs on every push |
 
 ---
 
-## 6. Repository layout
+## 8. Main design choices
+
+### The LLM reads; plain code decides
+
+The LLM handles perception and interpretation: reading the label photo, extracting facts
+from free-text notes, suggesting candidate answers, and judging whether a garbled string
+could plausibly be a given batch code. Plain deterministic code handles the probabilities,
+the VOI calculation, and the final choice.
+
+**Why:**
+
+1. **We have to prove there's no default branch.** A logged table of four options with
+   their costs proves it. "The model decided" does not.
+2. **We can test it.** We can sweep the whole probability space and assert properties.
+   You cannot do that to a prompt.
+3. **The video has to reproduce.** A sampled decision path is a liability on camera.
+
+**What we give up:** a fully LLM-driven agent would be quicker to build and would look
+more fashionable. We accept that. The agent still genuinely chooses which tools to call,
+when to stop looking, and whether to escalate — and those choices differ across the six
+cases. The agency is in the control flow, which we can prove, rather than in the text,
+which we cannot.
+
+**Rejected:**
+
+- *Fully LLM-driven loop* — not reproducible, can't defend R4.
+- *Pure rules engine* — can't read handwritten notes or judge misreads, and would make R2
+  ("not a fixed sequence") impossible to argue.
+- *LangGraph / CrewAI* — framework overhead for one agent with four actions, and it hides
+  the decision logic we most need on screen.
+- *Postgres + Docker* — setup friction for a reviewer.
+
+### Append-only stock ledger
+
+Nothing is ever edited in place. Every movement is a new row pointing back to the decision
+that caused it. So drift can always be traced to a decision and always undone. This is how
+we satisfy R7 in a way that survives scrutiny.
+
+### Ground truth is walled off
+
+The world module holds the real answers and the agent package cannot import it. Enforced
+by a test that greps for the import. Without this, every harm number we quote is suspect.
+
+### Faults are configuration, not code
+
+Each evidence source takes a fault profile; test cases are YAML files. Adding a seventh
+case needs no code change — which matters when tuning the demo the night before filming.
+
+---
+
+## 9. Repo layout
 
 ```
 LEC_AI/
 ├── objectives.md
-├── PLAN.md                       ← this file
-├── README.md                     ← quickstart, results table, video link
-├── pyproject.toml / uv.lock
+├── PLAN.md                    ← this file
+├── README.md                  quickstart + results + video link
 ├── config/
-│   ├── harm.yaml                 harm cost matrix
-│   ├── reliability.yaml          component failure priors
-│   └── scenarios/                S1…S6 YAML definitions
-├── world/                        ground truth — NOT importable by agent/
-│   ├── generators.py             seeded SKUs, batches, bins, orders, returns
-│   ├── labels.py                 Pillow render + corruption pipeline
-│   └── truth.py                  oracle interface for scoring only
-├── services/                     independently failable evidence sources
-│   ├── label_reader.py           vision + validators + FaultProfile
-│   ├── wms_client.py             SQL + FaultProfile (stale replica, dupes, timeout)
-│   ├── batch_registry.py         arbitration: mfg/QA dates, GS1
-│   ├── shipment_ledger.py        arbitration: dispatch record
-│   └── faults.py                 fault signatures + injection
+│   ├── harm.yaml              the cost table
+│   ├── reliability.yaml       how often each source fails
+│   └── scenarios/             S1–S6
+├── world/                     ground truth — agent/ may not import this
+│   ├── generators.py          seeded batches, bins, orders, returns
+│   ├── labels.py              draw labels, then damage them
+│   └── truth.py               oracle, for scoring only
+├── services/                  evidence sources that can fail
+│   ├── label_reader.py        vision + check digit + format + date checks
+│   ├── wms_client.py          SQL + fault injection
+│   ├── batch_registry.py      paid lookup: made / QA-released dates
+│   ├── shipment_ledger.py     paid lookup: what actually shipped
+│   └── faults.py              fault symptoms and injection
 ├── agent/
-│   ├── evidence.py               Pydantic evidence contracts
-│   ├── reliability.py            Beta posteriors per component × signature
-│   ├── hypotheses.py             candidate generation (LLM-assisted)
-│   ├── confusion.py              optical character confusion matrix
-│   ├── belief.py                 Bayesian update w/ fault marginalisation
-│   ├── harm.py                   cost matrix loader + Harm(a, H)
-│   ├── voi.py                    myopic expected value of sample information
-│   ├── policy.py                 expected-cost arg-min over the action set
-│   ├── loop.py                   the two-decision control loop + budgets
-│   └── trace.py                  structured decision trace emitter
+│   ├── evidence.py            evidence contracts
+│   ├── reliability.py         failure rates by symptom
+│   ├── hypotheses.py          candidate answers
+│   ├── confusion.py           character confusion table
+│   ├── belief.py              Bayes update
+│   ├── harm.py                cost table loader
+│   ├── voi.py                 is the lookup worth buying?
+│   ├── policy.py              cheapest-action chooser
+│   ├── loop.py                the two decisions + budgets
+│   └── trace.py               decision log
 ├── ledger/
-│   ├── ledger.py                 append-only, idempotent, reversible
-│   └── drift.py                  drift metrics vs ground truth
+│   ├── ledger.py              append-only stock movements
+│   └── drift.py               drift measurement
 ├── downstream/
-│   ├── demand.py                 seeded negative-binomial demand
-│   ├── picking.py                FEFO picker
-│   ├── replenish.py              reorder-point policy
-│   ├── forecast.py               exponential smoothing / Croston
-│   ├── simulate.py               180-day horizon runner
-│   └── metrics.py                expired-shipped, stock-out days, MAPE, silent-drift days
+│   ├── demand.py              seeded random demand
+│   ├── picking.py             FEFO picker
+│   ├── replenish.py           reordering
+│   ├── forecast.py            forecasting
+│   ├── simulate.py            180-day run
+│   └── metrics.py             expired shipped, stock-out days, silent days
 ├── harness/
-│   ├── policies.py               agent + 4 fixed baselines + oracle
-│   └── counterfactual.py         policy × seed sweep, bootstrap CIs
+│   ├── policies.py            agent + 4 fixed policies + oracle
+│   └── counterfactual.py      run everything, all seeds, get intervals
 ├── demo/
-│   ├── app.py                    Streamlit single-screen demo
-│   ├── trace_view.py             Rich terminal renderer
-│   └── shotlist.md               video script with timings
+│   ├── app.py                 the Streamlit screen
+│   └── shotlist.md            video script
 ├── tests/
-│   ├── test_policy.py            no-default, arg-min, cost sensitivity
-│   ├── test_belief.py            calibration, fault marginalisation
-│   ├── test_ledger.py            Hypothesis property tests (conservation)
-│   ├── test_scenarios.py         S1–S6 expected actions
-│   ├── test_harm_is_real.py      ← the R8 proof; fails if delta ≈ 0
-│   └── cassettes/                recorded LLM responses
-└── artifacts/
-    ├── traces/                   committed JSON traces for S1–S6
-    └── results/                  committed counterfactual table + charts
+│   ├── test_policy.py         no default branch, cost sensitivity
+│   ├── test_belief.py         calibration
+│   ├── test_ledger.py         property tests
+│   ├── test_scenarios.py      S1–S6 give the right actions
+│   ├── test_harm_is_real.py   ← the R8 proof
+│   └── cassettes/             recorded LLM responses
+└── artifacts/                 committed traces, results, charts
 ```
 
 ---
 
-## 7. Implementation phases
+## 10. Build order
 
-Estimates assume one engineer. Total ≈ 5–6 focused days.
+One engineer, roughly 5–6 focused days.
 
-| Phase | Deliverable | Est. | Exit criterion |
+| Phase | What | Days | Done when |
 |---|---|---|---|
-| **P0 — Skeleton** | repo scaffold, `uv`, ruff/mypy/pytest, CI green on an empty suite | 0.3d | `uv run pytest` passes |
-| **P1 — World** | generators, SQLite schema seeded with batches/bins/orders/shipments; label renderer + corruption pipeline; S1–S6 YAML | 0.8d | Can render a corrupted `B-2291` carton and dump the DB |
-| **P2 — Evidence services** | `LabelReader` (vision + checksum/format/date validators), `WMSClient`, fault injection with signatures | 1.0d | Each service fails on demand, in isolation, with a labelled signature |
-| **P3 — Belief core** | evidence contracts, confusion matrix, reliability model, Bayesian update with fault marginalisation | 1.0d | Posterior on S4 is `B-2288`-dominant *only after* arbitration; unit tests on synthetic likelihoods |
-| **P4 — Policy** | harm matrix, `Harm(a,H)`, VOI, arg-min policy, two-decision loop, budgets, trace emitter | 1.0d | S1–S6 produce the expected actions in §3.4; trace JSON committed |
-| **P5 — Ledger + drift** | append-only ledger, idempotency, reversal, drift metrics | 0.5d | Hypothesis property tests pass on unit conservation |
-| **P6 — Downstream proof** | demand, FEFO picker, replenishment, forecast, metrics, counterfactual harness, bootstrap CIs | 1.0d | `test_harm_is_real` passes with CI excluding zero; results table committed |
-| **P7 — Demo surface** | Streamlit app, Rich trace view, cassette-backed determinism | 0.7d | Full S4 run, cold start, no network, under 45s |
-| **P8 — Video** | shot list, 3 takes, edit to ≤3:00 | 0.5d | §10 |
-| **P9 — Polish** | README with results table, arbitration budget tuning, calibration diagram | 0.4d | Reviewer can reproduce headline number from a clean clone |
+| **P0** | Scaffold, tooling, empty CI | 0.3 | `uv run pytest` passes |
+| **P1** | World: generators, database, label drawing and damage, the six cases | 0.8 | Can render a damaged `B-2291` box |
+| **P2** | Evidence sources with fault injection | 1.0 | Each source fails on demand, alone, with a named symptom |
+| **P3** | Belief: confusion table, reliability model, Bayes update | 1.0 | S4 only flips to `B-2288` *after* the lookup |
+| **P4** | Costs, VOI, action chooser, the two-decision loop, logging | 1.0 | All six cases give the expected actions |
+| **P5** | Ledger and drift measurement | 0.5 | Property tests pass |
+| **P6** | Simulation and policy comparison | 1.0 | `test_harm_is_real` passes with an interval excluding zero |
+| **P7** | Demo screen, recorded LLM responses | 0.7 | Full S4 run, offline, under 45 seconds |
+| **P8** | Film and edit | 0.5 | ≤3:00 |
+| **P9** | README, tuning, calibration chart | 0.4 | Clean clone reproduces the headline number |
 
-**Critical path:** P1 → P2 → P3 → P4 → P6 → P8. P5 and P7 can slip a day without
-endangering the video. If time is short, cut S6 and the Croston forecast first; never cut
-P6, which is the entire basis of R8.
+**Critical path:** P1 → P2 → P3 → P4 → P6 → P8. P5 and P7 can slip a day. If time runs
+short, drop case S6 first. Never drop P6 — it is the entire basis of R8.
 
 ---
 
-## 8. Measurement and evaluation
+## 11. How we prove the harm (R8)
 
-### 8.1 Decision-quality metrics
+An anecdote is not proof. Proof is:
 
-- Batch-attribution accuracy vs oracle (per scenario, and aggregate).
-- Escalation rate — must be near-zero on S1/S2 (over-escalation is a failure).
-- Arbitration spend per return — must be £0 on S1.
-- Calibration: Brier score + reliability diagram over 200 seeds (G6).
-- Decision margin: `EC(second-best) − EC(best)`; near-zero margins flag brittle cases.
+1. A full simulation with known ground truth — demand, FEFO picking, reordering, forecasting.
+2. Every policy run on every case, 200 seeds, 180-day horizon.
+3. Results reported with confidence intervals that exclude zero.
+4. A test that fails if the harm disappears.
 
-### 8.2 Drift metrics (R7)
+### The headline table
 
-- Batch-attribution error rate.
-- Expiry L1 error in **unit-days** (the 84 × 166 = 13,944 unit-day figure for S4).
-- Bin misplacement count.
-- **Compounded drift over the horizon** — plotted, because the compounding curve is the
-  visual argument for "fails silently".
-
-### 8.3 Harm metrics (R8) — the headline table
-
-Run every policy on every scenario, 200 seeds, 180-day horizon. Report mean with
-bootstrap 95% CI.
-
-| Policy | Expired units shipped | Stock-out days | Write-off £ | Human cost £ | API £ | **Total harm £** |
+| Policy | Expired units shipped | Stock-out days | Write-off £ | Human £ | Lookups £ | **Total £** |
 |---|---|---|---|---|---|---|
-| Oracle (upper bound) | — | — | — | — | — | — |
-| **RECONCILE (ours)** | — | — | — | — | — | — |
-| `always-trust-label` | — | — | — | — | — | — |
-| `always-trust-wms` | — | — | — | — | — | — |
-| `always-escalate` | — | — | — | — | — | — |
-| `always-segregate` | — | — | — | — | — | — |
+| Oracle (best possible) | | | | | | |
+| **RECONCILE** | | | | | | |
+| Always trust label | | | | | | |
+| Always trust WMS | | | | | | |
+| Always escalate | | | | | | |
+| Always segregate | | | | | | |
 
-Two things this table must show to satisfy R2 and R8:
+Two things must hold: RECONCILE wins overall, **and** each fixed policy wins at least one
+individual case. ("Always trust WMS" gets S4 right by luck but fails S5. "Always escalate"
+causes no harm but burns £14 on every trivially clean case.)
 
-1. **RECONCILE beats every fixed policy in aggregate** — otherwise the adaptivity is
-   unjustified.
-2. **Each fixed policy wins on at least one individual scenario** — otherwise the
-   scenarios do not present genuinely competing strategies. (`always-trust-wms` wins S4
-   by luck but loses S5; `always-escalate` is harm-free but burns £14 on every trivially
-   clean S1.)
+We also report **silent days** per policy — the gap between the bad write and the first
+visible symptom.
 
-Plus the **silent-drift days** figure per policy — the delay between the erroneous write
-and the first externally observable symptom.
-
-### 8.4 The proof-of-harm test
+### The test
 
 `tests/test_harm_is_real.py` asserts:
 
-- `harm(always-trust-label, S4) − harm(RECONCILE, S4)` has a bootstrap 95% CI whose lower
-  bound is **> £1,500**;
-- expired-units-shipped under `always-trust-label` on S4 is **> 0** and under RECONCILE is
-  **0** on ≥95% of seeds;
-- aggregate harm of RECONCILE is strictly below every fixed baseline.
+- On S4, the saving of RECONCILE over "always trust label" has a 95% interval whose lower
+  bound is above **£1,500**.
+- "Always trust label" ships more than zero expired units on S4; RECONCILE ships zero on at
+  least 95% of seeds.
+- RECONCILE's total across all cases beats all four fixed policies.
 
 If the harm were hypothetical, this test would fail. That is the point.
 
----
+### Drift measurement (R7)
 
-## 9. Proof obligations — requirement → artefact
-
-This table is what a reviewer should be handed alongside the code.
-
-| ID | Requirement | Proof artefact |
-|---|---|---|
-| **PO-1** | R1 — two sequential decisions | `artifacts/traces/S4.json` shows Decision 1 (`GATHER`→`TRUST_RECORDS`) then Decision 2 (`COMMIT_HOME(B-2288, A-07-02)`), with distinct `EC` tables and Decision 2's posterior inherited from Decision 1 |
-| **PO-2** | R2 — competing strategies at runtime | §8.3 table: each fixed policy wins ≥1 scenario, none wins aggregate. Plus 6 traces with 4 distinct action sequences |
-| **PO-3** | R3 — two independently failing components | `test_scenarios.py::test_isolated_failures` — each service fails alone (S2 = OCR only, S5b = WMS only) and the agent still resolves |
-| **PO-4** | R4 — no default fallback | `test_policy.py::test_no_default_branch`: mutating `harm.yaml` flips the chosen action on the *same* belief state. Plus a static check that `policy.py` contains no unconditional terminal return |
-| **PO-5** | R4 — reasons about which failure is likelier | S5 trace shows WMS posterior-failure 0.71 vs OCR 0.24 given signatures, and the down-weighting flowing into the likelihood |
-| **PO-6** | R5a — unreadable metadata | S2 + S3 traces; corrupted carton images in `artifacts/` |
-| **PO-7** | R5b — consistent metadata, multiple plausible records | S4 trace; the label is checksum-valid and internally consistent throughout |
-| **PO-8** | R6 — all three responses exercised | S1 (trust physical), S4 (arbitrate), S3 (manual review) |
-| **PO-9** | R7 — no data drift | `test_ledger.py` Hypothesis property tests + drift metrics = 0 for RECONCILE on S1/S2/S4 |
-| **PO-10** | R8 — harm is real and measured | `test_harm_is_real.py` + §8.3 table with CIs + compounding-drift chart |
-| **PO-11** | R9 — working implementation | `uv sync && uv run demo --scenario S4` from a clean clone, offline (cassettes) |
-| **PO-12** | R10 — obvious choice is wrong | The video; S4 by construction (§3.3) |
+- How often the batch is misattributed.
+- Expiry error in **unit-days** (S4: 84 units × 166 days = 13,944).
+- Wrong-bin count.
+- **Drift over time** — plotted, because the compounding curve is the visual argument for
+  "fails silently".
 
 ---
 
-## 10. Demo and video plan (R10)
+## 12. Requirement → proof
 
-### 10.1 Demo surface
-
-One Streamlit screen, four panes, no scrolling and no tab-switching on camera:
-
-- **Top-left:** the carton photo, zoomable, with the OCR read and its confidence overlaid.
-- **Top-right:** live belief bars over candidate batches, animating on each evidence update.
-- **Bottom-left:** the expected-cost table for the current decision — every candidate
-  action, its expected harm, its direct cost, its total, and the winner highlighted with
-  the margin. *This pane is the single most important thing in the video*, because it is
-  the visual proof of R2 and R4.
-- **Bottom-right:** the downstream harm comparison — agent vs `always-trust-label`,
-  with expired-units and stock-out-days bars and the drift-compounding curve.
-
-Determinism: seeded RNG, LLM cassettes, no network at demo time.
-
-### 10.2 Shot list — 3:00
-
-| Time | Shot | Beat |
-|---|---|---|
-| 0:00–0:18 | Warehouse framing, the return arrives | 84 of 240 units back from `CUST-118`. Partial returns are where inventory truth goes to die. |
-| 0:18–0:38 | Carton pane; the label is crisp | `B-2291`, BB 2027-03-15, confidence 0.94, **check digit valid**. "Every surface signal says trust this." |
-| 0:38–1:05 | WMS pane; conflict | Two plausible shipments to this customer, neither is `B-2291`. Belief bars go flat — genuine ambiguity. |
-| 1:05–1:32 | **Cost table** | Four actions priced side by side. `COMMIT` is cheap but risks £4k. `ESCALATE` costs £14 now. `GATHER` costs £0.30 and buys expected £2.9k of harm reduction. Agent buys evidence. **This is the money shot.** |
-| 1:32–1:52 | Arbitration returns | `B-2291` QA-released 2026-06-28 — *after* the shipment left. Temporal impossibility. Belief collapses onto `B-2288` (0.86). |
-| 1:52–2:12 | Decision 2 | Bin assignment under residual uncertainty: `COMMIT_HOME(A-07-02)` vs `SEGREGATE`. Cost table again; commit wins by a stated margin. |
-| 2:12–2:48 | **The counterfactual** | Rerun with `always-trust-label`. Simulator: 84 units ship ~10 weeks past best-before, £4,032 exposure, stock-out in week 14 — and **118 days of silence** before anyone could have noticed. Drift curve compounds. |
-| 2:48–3:00 | Close | Two failure modes, four competing actions, no default branch, one seed away from reproducing. |
-
-### 10.3 Filming risks
-
-- LLM latency on camera → cassettes, pre-warmed.
-- Streamlit rerun flicker → pre-compute all states, step through with a "next" control.
-- The cost table is dense → hold the shot for a full 8 seconds and highlight one row at a time.
+| Requirement | Where it's proved |
+|---|---|
+| R1 — two decisions | `artifacts/traces/S4.json` shows both, with the second using the first's probabilities |
+| R2 — real alternatives | §11 table: each fixed policy wins somewhere, none wins overall; six traces, four distinct action sequences |
+| R3 — independent failures | `test_scenarios.py` — each source fails alone and the agent still resolves |
+| R4 — no default | `test_policy.py` — editing `harm.yaml` flips the action on identical evidence; plus a static check for unconditional returns |
+| R4 — which failure | S5 trace shows WMS failure probability 0.71 vs label 0.24, and that feeding into the maths |
+| R5a — unreadable | S2 and S3 traces, plus the damaged label images |
+| R5b — readable but conflicting | S4 trace: the check digit stays valid throughout |
+| R6 — all three responses | S1 (trust label), S4 (pay for lookup), S3 (human) |
+| R7 — no drift | Property tests plus drift = 0 for RECONCILE on S1, S2, S4 |
+| R8 — real harm | `test_harm_is_real.py`, the results table, the drift chart |
+| R9 — it works | `uv sync && uv run demo --scenario S4` on a clean machine, offline |
+| R10 — obvious is wrong | The video; S4 is built for this |
 
 ---
 
-## 11. Risks and mitigations
+## 13. Demo and video
 
-| Risk | Impact | Mitigation |
-|---|---|---|
-| Harm delta is real but statistically weak | R8 unproven; the whole submission wobbles | 200+ seeds, 180-day horizon, bootstrap CIs; tune horizon so the FEFO pick of misfiled stock falls inside it — verify in P6, not P8 |
-| Agent over-escalates and looks trivial | Fails R2/R4 in spirit | S1/S2 assert near-zero escalation; escalation is priced at £14 so it loses when evidence is decisive |
-| Scenarios feel contrived to the reviewer | Credibility | Every failure mode is a documented real warehouse failure — reused outer sleeves, replica lag during reconciliation windows, `1`/`l` glyph confusion. Cite these in the README. |
-| Vision model reads the corrupted label too well | S2/S5/S6 lose their teeth | Corruption pipeline is parameterised; calibrate corruption strength against measured read accuracy in P2 and lock the parameters |
-| Hybrid architecture reads as "not really an agent" | Perception of R2 | README leads with the four-action control flow and six divergent traces; agency is demonstrated as *choice*, not as prose |
-| LLM non-determinism breaks the video or CI | Fails R9/R10 | temp 0 + committed cassettes; CI runs offline |
-| Scope creep into a warehouse product | Miss the deadline | Non-goals in §2.3 are binding; P5/P7 are the designated slip budget |
-| Ground truth leaks into the agent | Every harm number invalidated | Module boundary + import-check test (§5.3) |
+### The screen
+
+One Streamlit page, four panes, no scrolling and no tab-switching on camera:
+
+- **Top left** — the box photo, with the label reading and its confidence.
+- **Top right** — probability bars per candidate batch, updating as evidence arrives.
+- **Bottom left** — the cost table for the current decision: every action, its expected
+  harm, its direct cost, the total, and the winner highlighted. **This pane is the most
+  important thing in the video** — it is the visible proof of R2 and R4.
+- **Bottom right** — harm comparison: agent vs "always trust label", plus the drift curve.
+
+### Shot list — 3:00
+
+| Time | Beat |
+|---|---|
+| 0:00–0:18 | 84 tins of 240 come back. Partial returns are where inventory truth goes to die. |
+| 0:18–0:38 | The label is crisp. `B-2291`, March 2027, 94% confident, check digit valid. Everything says trust it. |
+| 0:38–1:05 | The WMS shows two shipments to this customer, neither is `B-2291`. Probability bars go flat — real ambiguity. |
+| 1:05–1:32 | **The cost table.** Committing is free but risks £4k. A human costs £14 now. A £0.30 lookup is expected to avoid £2.9k of harm. The agent buys the lookup. *Hold this shot.* |
+| 1:32–1:52 | The lookup: `B-2291` was QA-released *after* the shipment left. Impossible. Belief collapses onto `B-2288` at 86%. |
+| 1:52–2:12 | Second decision: home bin vs segregate. Cost table again; commit wins, by a stated margin. |
+| 2:12–2:48 | **The counterfactual.** Rerun trusting the label: 84 tins ship ten weeks past best-before, £4,032, stock-out in week 14 — and **118 days before anyone could have noticed**. |
+| 2:48–3:00 | Two failure types, four competing actions, no default branch, one seed from reproducing. |
+
+Filming risks: LLM latency (use recorded responses, pre-warmed); Streamlit flicker
+(pre-compute every state, step through with a button); the cost table is dense (hold for a
+full 8 seconds, highlight one row at a time).
 
 ---
 
-## 12. Definition of done
+## 14. Risks
+
+| Risk | Mitigation |
+|---|---|
+| The harm is real but statistically weak | 200+ seeds, 180-day horizon, bootstrap intervals. Check in P6, not P8, that the horizon is long enough for misfiled stock to actually get picked. |
+| The agent escalates too often and looks trivial | S1 and S2 assert near-zero escalation; escalation costs £14, so it loses when the evidence is clear |
+| The cases look contrived | Every failure is a documented real one — reused outer boxes, replica lag, `1`/`l` confusion. Say so in the README. |
+| The vision model reads damaged labels too well | Damage strength is a parameter; calibrate against measured accuracy in P2 and lock it |
+| "That's not really an agent" | README leads with the four-action control flow and six different traces |
+| LLM randomness breaks the video or CI | Temperature 0 plus recorded responses; CI runs offline |
+| Scope creep | §4 non-goals are binding; P5 and P7 are the slip budget |
+| Ground truth leaks into the agent | Module boundary plus an import check test |
+
+---
+
+## 15. Done when
 
 - [ ] `git clone && uv sync && uv run demo --scenario S4` works offline on a clean machine.
-- [ ] All six scenarios produce their expected actions (§3.4), traces committed to `artifacts/traces/`.
+- [ ] All six cases give the expected actions; traces committed.
 - [ ] `uv run pytest` green, including `test_harm_is_real.py`.
-- [ ] Counterfactual results table (§8.3) committed with CIs, RECONCILE beating every fixed policy in aggregate and each fixed policy winning ≥1 scenario.
-- [ ] All twelve proof obligations in §9 have a named, committed artefact.
-- [ ] README opens with the headline harm number and the reproduction command.
-- [ ] Video ≤ 3:00, showing S4, with the cost table and the counterfactual on screen.
+- [ ] Results table committed with intervals, RECONCILE winning overall and each fixed
+      policy winning at least one case.
+- [ ] Every row in §12 has a committed artefact.
+- [ ] README opens with the headline number and the command to reproduce it.
+- [ ] Video ≤3:00, showing S4, with the cost table and the counterfactual on screen.
 
 ---
 
-## 13. Open questions to resolve during P1–P2
+## 16. Open questions for P1–P2
 
-1. **Horizon length.** 180 days is a first guess. It must be long enough that misfiled
-   stock actually gets FEFO-picked inside the window, or the headline harm is zero by
-   construction. Verify empirically in P6 and adjust before tuning anything else.
-2. **Reliability priors.** Should the Beta posteriors be warm-started from a synthetic
-   history of ~500 resolved returns, or start uninformative? Warm-starting makes S5's
-   reasoning sharper and more legible on camera; uninformative is more honest about a
-   cold-start deployment. Leaning warm-start with the history committed and inspectable.
-3. **Second perception source.** Adding Tesseract as a *disagreeing* reader alongside the
-   vision model would strengthen R3 (two readers that fail differently). Worth ~2 hours
-   if P2 finishes early; otherwise cut.
-4. **Quantity splitting.** Should a hypothesis be allowed to split the 84 units across two
-   batches (e.g. 60 from `B-2288`, 24 from `B-2290`)? Physically realistic and it makes the
-   posterior richer, but it enlarges the hypothesis space considerably. Recommend
-   deferring to a stretch goal after P6 is green.
+1. **Is 180 days long enough?** The misfiled stock has to actually get picked inside the
+   window, or the headline harm is zero by construction. Check this empirically in P6
+   before tuning anything else. *This is the biggest live risk in the plan.*
+2. **Warm-start the reliability model?** Starting from a synthetic history of ~500 past
+   returns makes S5's reasoning sharper on camera. Starting blank is more honest about a
+   real cold start. Leaning warm-start, with the history committed so it can be inspected.
+3. **Add a second label reader?** Running Tesseract alongside the vision model gives two
+   readers that fail differently, strengthening R3. Worth ~2 hours if P2 finishes early.
+4. **Allow split answers?** Letting a hypothesis be "60 tins from `B-2288`, 24 from
+   `B-2290`" is realistic but enlarges the search space a lot. Defer until P6 is green.
