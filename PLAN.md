@@ -173,7 +173,16 @@ untouched for months. Then:
 | **S3** | Nothing to go on | unreadable | 3 open orders, 3 batches | Escalate | Escalation chosen because it's genuinely cheapest |
 | **S4** | **The demo case** | perfect but wrong | 2 plausible, neither matches | Gather, then commit to `B-2288` | Failure type (b), and R10 |
 | **S5** | Both broken | 55% confidence, partial | stale replica, timestamps out of order | Distrust the WMS, gather | R4 — working out which one failed |
-| **S6** | Near-miss twins | one character off, **check digit valid for two different batches** | both plausible | Gather, then segregate | Leftover uncertainty handled safely rather than by coin flip |
+| **S6** | Near-miss twins | torn label: last digit **and check digit missing**, so `B-229?` fits two real batches | both plausible | Gather, then segregate | Leftover uncertainty handled safely rather than by coin flip |
+
+> **Revised during the build.** S6 was originally written as "one character misread, but
+> the check digit is still valid for two different batches". That turns out to be
+> impossible: with the check digit scheme in `common/coding.py`, changing any single body
+> digit always breaks the check digit — verified exhaustively in
+> `tests/test_coding.py::test_single_digit_change_always_breaks_the_check_digit`. That is
+> precisely what check digits are for. So the ambiguity now comes from the check digit
+> being *physically destroyed* along with the last body digit, leaving two real batches
+> that both fit and nothing left to separate them. Same test, honest mechanism.
 
 ---
 
