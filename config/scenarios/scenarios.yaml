@@ -76,9 +76,14 @@ S6:
   return_id: RET-S6
   label_damage: torn_piece
   label_reader: cassette
-  observed_outcome: segregate
+  # Was segregate until holding stock was priced honestly. A hold is now dated at
+  # the earliest expiry any batch of this product has, which is the only date
+  # that is safe when the stock might be a batch nobody named. That costs real
+  # shelf life, and on 77 units twenty minutes of an analyst is cheaper. The
+  # margin over paying for a lookup is only £0.30, and the trace says so.
+  observed_outcome: escalate
   observed_batch: null
-  observed_gathers: true
+  observed_gathers: false
 
 S7:
   name: The answer is only in the note

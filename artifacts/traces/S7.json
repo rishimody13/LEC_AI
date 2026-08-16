@@ -44,9 +44,9 @@
     {
       "name": "who to believe",
       "belief": {
-        "B-2293": 0.7504,
-        "B-2296": 0.2271,
-        "other": 0.0225
+        "B-2293": 0.6617,
+        "B-2296": 0.2003,
+        "other": 0.138
       },
       "options": [
         {
@@ -78,32 +78,33 @@
         },
         {
           "action": "commit B-2293 -> C-04-03",
-          "expected_cost_gbp": 39.88,
+          "expected_cost_gbp": 182.61,
           "exposure": {
-            "misattribution_unit": 11.811,
-            "wrong_zone": 0.227,
-            "expired_unit": 0.584
+            "misattribution_unit": 10.415,
+            "wrong_zone": 0.2,
+            "expired_unit": 3.587
           },
           "fee_gbp": 0.0
         },
         {
           "action": "segregate -> H-01-01",
-          "expected_cost_gbp": 47.72,
+          "expected_cost_gbp": 209.04,
           "exposure": {
-            "wrong_zone": 0.978,
-            "expired_unit": 0.584,
+            "shelf_waste_unit_day": 627.559,
+            "wrong_zone": 0.862,
+            "expired_unit": 3.587,
             "deferred_review": 1.0,
-            "misattribution_unit": 12.98
+            "misattribution_unit": 17.59
           },
           "fee_gbp": 0.0
         },
         {
           "action": "commit B-2296 -> A-07-08",
-          "expected_cost_gbp": 1940.1,
+          "expected_cost_gbp": 1858.33,
           "exposure": {
-            "expired_unit": 39.605,
-            "misattribution_unit": 39.02,
-            "wrong_zone": 0.75
+            "expired_unit": 37.998,
+            "misattribution_unit": 34.41,
+            "wrong_zone": 0.662
           },
           "fee_gbp": 0.0
         }
@@ -133,5 +134,27 @@
   "notes": [
     "the note named ['B-2296'], which neither the records nor the label mention; added as candidates after checking they are real batches",
     "who to believe: only \u00a30.30 (1.4%) ahead of 'gather batch_registry', which would lead somewhere different. A decision this close rests on a chosen parameter rather than on the evidence."
+  ],
+  "stock_movements": [
+    {
+      "seq": 1,
+      "at": "2026-08-15",
+      "kind": "receipt",
+      "quantity": 52,
+      "from": "SKU-4471 unidentified@no-date in @customer",
+      "to": "SKU-4471 unidentified@no-date in R-00-01",
+      "caused_by": "RET-S7:intake",
+      "reason": "partial return received at goods-in"
+    },
+    {
+      "seq": 2,
+      "at": "2026-08-15",
+      "kind": "putaway",
+      "quantity": 52,
+      "from": "SKU-4471 unidentified@no-date in R-00-01",
+      "to": "SKU-4471 unidentified@no-date in Q-01-01",
+      "caused_by": "RET-S7:placement",
+      "reason": "handed to a person; still unidentified"
+    }
   ]
 }

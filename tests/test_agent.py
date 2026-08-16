@@ -179,3 +179,45 @@ def test_the_agent_is_reproducible():
     a, _ = run("S4")
     b, _ = run("S4")
     assert a.trace.to_dict() == b.trace.to_dict()
+
+
+def test_an_empty_batch_list_is_not_proof_that_a_code_is_fake():
+    """Found by the generative sweep, with the warehouse system down.
+
+    The agent asks "does this code belong to a real batch?" and treats a no as
+    strong evidence that the label was misread rather than genuine and on the
+    wrong box. When the warehouse system times out the batch list comes back
+    empty, and an empty list was answering no to every code. Absence of evidence
+    was being read as evidence of absence, and it suppressed the reused-box
+    explanation by a factor of fifty - leaving the agent 99.996% certain of a
+    single unverified label reading with nothing to check it against.
+
+    With no batch list the agent should be about as sure as the label itself is
+    reliable, and no surer.
+    """
+    from agent import belief as belief_mod
+    from agent.candidates import Candidate, CandidateSet
+    from agent.evidence import LabelEvidence
+
+    candidates = CandidateSet(
+        candidates=[
+            Candidate(batch_id="B-2291", source="label_unverified"),
+            Candidate(batch_id=None, source="catch_all"),
+        ],
+        prior={"B-2291": 0.92, "other": 0.08},
+    )
+    label = LabelEvidence(code_text="B-2291-4", confidence=0.95, check_digit_ok=True)
+
+    unchecked = belief_mod.label_likelihood(label, candidates, RELIABILITY, known_codes=None)
+    checked_against_nothing = belief_mod.label_likelihood(
+        label, candidates, RELIABILITY, known_codes=set()
+    )
+    assert unchecked == checked_against_nothing, (
+        "an empty batch list must be treated as no information, not as a no"
+    )
+
+    # And a real list that genuinely lacks the code still counts against it.
+    real_list = belief_mod.label_likelihood(
+        label, candidates, RELIABILITY, known_codes={"B-9999-1"}
+    )
+    assert real_list["other"] < unchecked["other"]

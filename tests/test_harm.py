@@ -104,3 +104,31 @@ def test_linear_costs_add_and_scale():
     assert combined.exposure[EXPIRED_UNIT] == 5.0
     assert combined.fixed == 1.5
     assert a.scaled(2.0).exposure[EXPIRED_UNIT] == 4.0
+
+
+def test_stock_filed_with_no_date_carries_no_expiry_risk():
+    """Found when the warehouse system was down on a generated case.
+
+    Picking runs first-expired-first-out, which cannot rank what it cannot date,
+    and the hold area is not picked from anyway. So undated held stock cannot
+    ship, and cannot ship expired. Charging it a coin flip on shipping expired
+    stock priced the safest available response to a total outage as the most
+    reckless one, and stopped the agent segregating when it should.
+
+    The person who has to come back and identify it is not free - that is the
+    deferred review, charged separately.
+    """
+    from datetime import date
+
+    from agent.candidates import Candidate
+    from agent.policy import filing_harm
+
+    truth = Candidate(batch_id="B-2288", best_before=date(2026, 9, 30), home_bin="A-07-02")
+    dated = filing_harm(
+        date(2027, 5, 1), "H-01-01", truth, 84, date(2026, 8, 15), COSTS.sell_through_days
+    )
+    undated = filing_harm(None, "H-01-01", truth, 84, date(2026, 8, 15), COSTS.sell_through_days)
+
+    assert dated.exposure.get(EXPIRED_UNIT, 0.0) > 0, "a date later than the truth is dangerous"
+    assert undated.exposure.get(EXPIRED_UNIT, 0.0) == 0.0
+    assert undated.total(COSTS) == 0.0

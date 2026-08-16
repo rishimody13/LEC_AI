@@ -43,10 +43,10 @@
     {
       "name": "who to believe",
       "belief": {
-        "B-2288": 0.2228,
-        "B-2290": 0.1551,
-        "B-2291": 0.6186,
-        "other": 0.0036
+        "B-2288": 0.2222,
+        "B-2290": 0.1547,
+        "B-2291": 0.617,
+        "other": 0.006
       },
       "options": [
         {
@@ -78,44 +78,44 @@
         },
         {
           "action": "segregate -> H-01-01",
-          "expected_cost_gbp": 64.04,
+          "expected_cost_gbp": 69.13,
           "exposure": {
-            "wrong_zone": 0.996,
-            "shelf_waste_unit_day": 909.859,
-            "expired_unit": 0.149,
+            "wrong_zone": 0.994,
+            "shelf_waste_unit_day": 907.584,
+            "expired_unit": 0.254,
             "deferred_review": 1.0,
-            "misattribution_unit": 32.041
+            "misattribution_unit": 32.171
           },
           "fee_gbp": 0.0
         },
         {
           "action": "commit B-2288 -> A-07-02",
-          "expected_cost_gbp": 90.07,
+          "expected_cost_gbp": 94.89,
           "exposure": {
-            "shelf_waste_unit_day": 909.859,
-            "misattribution_unit": 64.99,
-            "wrong_zone": 0.774,
-            "expired_unit": 0.149
+            "shelf_waste_unit_day": 907.584,
+            "misattribution_unit": 64.827,
+            "wrong_zone": 0.772,
+            "expired_unit": 0.254
           },
           "fee_gbp": 0.0
         },
         {
           "action": "commit B-2290 -> A-07-05",
-          "expected_cost_gbp": 974.95,
+          "expected_cost_gbp": 977.55,
           "exposure": {
-            "expired_unit": 18.861,
-            "misattribution_unit": 70.67,
-            "wrong_zone": 0.841
+            "expired_unit": 18.919,
+            "misattribution_unit": 70.493,
+            "wrong_zone": 0.839
           },
           "fee_gbp": 0.0
         },
         {
           "action": "commit B-2291 -> C-04-01",
-          "expected_cost_gbp": 1562.08,
+          "expected_cost_gbp": 1563.22,
           "exposure": {
-            "expired_unit": 31.892,
-            "misattribution_unit": 31.742,
-            "wrong_zone": 0.378
+            "expired_unit": 31.917,
+            "misattribution_unit": 31.663,
+            "wrong_zone": 0.377
           },
           "fee_gbp": 0.0
         }
@@ -144,5 +144,27 @@
   "outcome": "escalated at decision 1",
   "notes": [
     "who to believe: only \u00a30.30 (1.0%) ahead of 'gather batch_registry', which would lead somewhere different. A decision this close rests on a chosen parameter rather than on the evidence."
+  ],
+  "stock_movements": [
+    {
+      "seq": 1,
+      "at": "2026-08-15",
+      "kind": "receipt",
+      "quantity": 84,
+      "from": "SKU-4471 unidentified@no-date in @customer",
+      "to": "SKU-4471 unidentified@no-date in R-00-01",
+      "caused_by": "RET-S4:intake",
+      "reason": "partial return received at goods-in"
+    },
+    {
+      "seq": 2,
+      "at": "2026-08-15",
+      "kind": "putaway",
+      "quantity": 84,
+      "from": "SKU-4471 unidentified@no-date in R-00-01",
+      "to": "SKU-4471 unidentified@no-date in Q-01-01",
+      "caused_by": "RET-S4:placement",
+      "reason": "handed to a person; still unidentified"
+    }
   ]
 }

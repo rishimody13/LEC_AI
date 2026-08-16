@@ -37,6 +37,7 @@ from agent.evidence import (
 )
 from agent.notes import NoteFacts
 from common.coding import label_code
+from ledger.drift import TruthBook
 from services import db
 from services.batch_registry import BatchRegistry
 from services.faults import LookupFaults, WmsFaults
@@ -129,6 +130,14 @@ class Case:
 
     def best_before(self, batch_id: str) -> date:
         return next(b.best_before for b in self.world.batches if b.batch_id == batch_id)
+
+    def truth_book(self) -> TruthBook:
+        """The answers, in the form the drift measurement wants them."""
+        return TruthBook(
+            true_batch={self.intake.return_id: self.truth},
+            best_before={b.batch_id: b.best_before for b in self.world.batches},
+            home_bin={b.batch_id: b.home_bin for b in self.world.batches},
+        )
 
 
 @dataclass

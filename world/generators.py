@@ -34,8 +34,11 @@ def _bins() -> list[Bin]:
         Bin(bin_id="A-07-08", zone="A-07", capacity=2000),
         Bin(bin_id="C-04-01", zone="C-04", capacity=3000),
         Bin(bin_id="C-04-03", zone="C-04", capacity=3000),
+        # Goods-in. Returns land here before anyone decides what they are.
+        Bin(bin_id="R-00-01", zone="R-00", capacity=1000),
         # Holding area used when the agent decides to segregate.
         Bin(bin_id="H-01-01", zone="H-01", capacity=500, status=BinStatus.HOLD),
+        # Where a return waits when it has been handed to a person.
         Bin(bin_id="Q-01-01", zone="Q-01", capacity=500, status=BinStatus.QUARANTINE),
     ]
     return bins

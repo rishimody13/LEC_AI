@@ -58,6 +58,12 @@ class Action:
     bin_id: str | None = None
     #: For gather: which lookups to buy.
     tools: tuple[str, ...] = ()
+    #: The expiry date this action would write against the stock. For a commit
+    #: that is the batch's own date; for a segregate it is the conservative date
+    #: the hold is placed under. Carried here so the ledger records the date the
+    #: decision actually used, rather than working it out a second time and
+    #: risking the two disagreeing.
+    recorded_best_before: date | None = None
 
     @property
     def label(self) -> str:
@@ -172,7 +178,21 @@ def filing_harm(
     knocking 100 days off a date that is still a year out costs nothing. We only
     charge for the days by which the recorded date cuts into that window.
     """
-    if truth.is_catch_all or truth.best_before is None or recorded_expiry is None:
+    if recorded_expiry is None:
+        # No date was written against the stock at all. Picking runs
+        # first-expired-first-out, which cannot rank what it cannot date, and the
+        # hold area is not picked from anyway. So these units cannot ship, and
+        # cannot ship expired. They are not free - somebody has to come back and
+        # identify them - but that is the deferred review cost, charged
+        # separately, not an expiry risk.
+        #
+        # Rolling this in with the two cases below priced a hold placed with no
+        # date as a coin flip on shipping expired stock, which made the safest
+        # thing the agent can do when the batch list is down look like the most
+        # reckless.
+        return LinearCost()
+
+    if truth.is_catch_all or truth.best_before is None:
         # We do not know what it really is, so we do not know which way the
         # expiry is wrong. Treat it as an even chance either way rather than
         # assuming the worst, which would make every commit look reckless.
@@ -233,6 +253,36 @@ def commit_cost(
     return expected(harms, belief)
 
 
+def conservative_expiry(belief: Belief) -> date | None:
+    """The date segregated stock is held under: the earliest it could possibly be.
+
+    Holding stock back is only worth anything if this date is never later than
+    the truth. An expiry no later than the truth cannot cause an expired
+    shipment; an earlier one only wastes shelf life, which is charged for
+    honestly and is the cheaper mistake by a wide margin.
+
+    The obvious version of this - the earliest date among the live candidates -
+    is not conservative at all. It is the earliest date among the answers we
+    happened to think of, and the catch-all exists precisely to say the answer
+    might not be one of them. The catch-all carries no date, so it can never pull
+    the date down, and a hold could end up dated later than the stock really
+    lasts. That is the failure the whole design exists to avoid, arriving through
+    the action that is supposed to be the safe one. The generative sweep found
+    exactly that.
+
+    So the date is the earliest best-before of any batch of this product that
+    exists. Whatever the stock turns out to be, it cannot expire before then.
+
+    ``None`` when the batch list was unavailable: there is then no date we can
+    stand behind, and we do not invent one. Stock held with no date cannot be
+    picked first-expired-first-out at all, which is the safe way to be ignorant.
+
+    The named candidates play no part. When we know enough for their dates to
+    matter, committing is the cheaper action anyway, and the arithmetic picks it.
+    """
+    return belief.candidates.earliest_known_expiry
+
+
 def segregate_cost(belief: Belief, quantity: int, today: date, costs: CostModel) -> LinearCost:
     """Hold the stock under the earliest expiry any live candidate could have.
 
@@ -249,12 +299,7 @@ def segregate_cost(belief: Belief, quantity: int, today: date, costs: CostModel)
     holding stock over deciding: it treated a deferral as if it removed the
     uncertainty.
     """
-    dates = [
-        c.best_before
-        for c in belief.candidates.candidates
-        if c.best_before is not None and belief.of(c.name) > 0.01
-    ]
-    conservative = min(dates) if dates else None
+    conservative = conservative_expiry(belief)
 
     harms = {
         c.name: filing_harm(conservative, HOLD_BIN, c, quantity, today, costs.sell_through_days)
@@ -291,14 +336,23 @@ def terminal_actions(belief: Belief, quantity: int, costs: CostModel, today: dat
         cost = commit_cost(c, belief, quantity, today, costs)
         out.append(
             Priced(
-                action=Action(kind=Kind.COMMIT, batch_id=c.batch_id, bin_id=c.home_bin),
+                action=Action(
+                    kind=Kind.COMMIT,
+                    batch_id=c.batch_id,
+                    bin_id=c.home_bin,
+                    recorded_best_before=c.best_before,
+                ),
                 cost=cost,
                 total=0.0,
             )
         )
     out.append(
         Priced(
-            action=Action(kind=Kind.SEGREGATE, bin_id=HOLD_BIN),
+            action=Action(
+                kind=Kind.SEGREGATE,
+                bin_id=HOLD_BIN,
+                recorded_best_before=conservative_expiry(belief),
+            ),
             cost=segregate_cost(belief, quantity, today, costs),
             total=0.0,
         )

@@ -129,6 +129,41 @@ def test_the_record_completeness_rules_stop_applying_to_off_record_stock(rule):
     assert rule not in rules(with_flag)
 
 
+def test_a_repacker_may_return_more_of_a_batch_than_we_sent_them():
+    """Found by the generative sweep, on a case nobody wrote.
+
+    A customer who repacks splits and recombines pallets, so one we sent 66 units
+    of a batch can perfectly well send back 72 of it. The rule describes a
+    customer who keeps consignments intact. Applying it anyway ruled out the true
+    batch, and it did so hardest on exactly the customers whose habits make these
+    cases difficult in the first place.
+    """
+    big = INTAKE.model_copy(update={"quantity": 500})
+    repacker = big.model_copy(update={"consignee_repacks": True})
+    reg = registry(date(2026, 1, 25), ["CUST-118"])
+
+    assert "returned_more_than_shipped" in rules(constraints.check(CANDIDATES, big, RECORDS, reg))
+    assert "returned_more_than_shipped" not in rules(
+        constraints.check(CANDIDATES, repacker, RECORDS, reg)
+    )
+
+
+def test_repacking_does_not_excuse_a_batch_we_never_sent_them():
+    """The other half of the rule above, and the one that matters more.
+
+    Repacking rearranges stock the customer already has; it cannot produce a
+    batch we never sent them. A batch arriving from somewhere else is off-record
+    stock, which is a separate flag. This is the rule the hero case turns on, and
+    an earlier version of the fix above switched it off for repackers too - which
+    would have removed the evidence that solves S4.
+    """
+    repacker = INTAKE.model_copy(update={"consignee_repacks": True})
+    found = constraints.check(
+        CANDIDATES, repacker, RECORDS, registry(date(2026, 1, 25), ["CUST-204"])
+    )
+    assert "never_allocated_to_customer" in rules(found)
+
+
 def test_nothing_is_ever_driven_to_zero():
     """Nothing recovers from zero, and the source reporting the rule can be wrong."""
     found = constraints.check(

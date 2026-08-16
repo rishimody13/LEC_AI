@@ -157,7 +157,13 @@ def label_likelihood(
     share = 1.0 / max(len(named), 1)
 
     # Does what we read correspond to a label a real batch carries?
-    if known_codes is not None and label.check_digit_ok is not None and read not in known_codes:
+    #
+    # An *empty* set is not a no. It means the warehouse system did not answer,
+    # so there is no list to check against. Testing `is not None` here let a
+    # missing batch list act as proof that a perfectly genuine label could not
+    # belong to another box, which suppressed the reused-box explanation
+    # fiftyfold and left the agent 99.996% sure of one unverified reading.
+    if known_codes and label.check_digit_ok is not None and read not in known_codes:
         share *= P_WRONG_LABEL_UNKNOWN_CODE
 
     for c in candidates.candidates:

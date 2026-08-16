@@ -70,6 +70,15 @@ class CandidateSet:
     #: Candidates the label named that no known batch matches. Kept out of the
     #: main list and folded into the catch-all instead.
     rejected: list[str] = field(default_factory=list)
+    #: The earliest best-before date of any batch of this product that exists.
+    #:
+    #: This is the only date we can stand behind if the stock turns out to be a
+    #: batch we never named. The catch-all has no date of its own, so without
+    #: this the "safest possible expiry" used when holding stock back would be
+    #: the earliest date among the batches we happened to think of - which can
+    #: easily be later than the truth. ``None`` when the batch list was
+    #: unavailable, which means no date can be justified at all.
+    earliest_known_expiry: date | None = None
 
     def by_name(self, name: str) -> Candidate:
         return next(c for c in self.candidates if c.name == name)
@@ -198,10 +207,12 @@ def build(
     candidates.append(Candidate(batch_id=None, source="catch_all"))
 
     off_record = bool(note and note.suggests_off_record_stock) or records_look_incomplete(records)
+    dated = [b.best_before for b in catalogue.values() if b.best_before is not None]
     return CandidateSet(
         candidates=candidates,
         prior=_prior(candidates, catalogue, off_record=off_record),
         rejected=rejected,
+        earliest_known_expiry=min(dated) if dated else None,
     )
 
 

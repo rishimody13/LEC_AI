@@ -57,6 +57,22 @@ def check(
     when the paperwork says the goods arrived that way (`off_record`) these two
     stop being rules at all.
 
+    `returned_more_than_shipped` has a second thing that breaks it, and only it:
+    a customer who repacks. Repacking means splitting and recombining pallets, so
+    a customer we sent 66 units of a batch can perfectly well send back 72 of it,
+    having merged it with stock from another delivery of the same batch. "You
+    cannot return more than was sent" describes a customer who keeps consignments
+    intact, and a repacker is by definition not that. Applying it anyway rules
+    out the true batch precisely when the customer's habits are what made the
+    case hard, which is what it was doing until the generative sweep caught it.
+
+    `never_allocated_to_customer` is *not* weakened by repacking, and the
+    difference matters. Repacking rearranges stock the customer already has; it
+    cannot produce a batch we never sent them. A batch arriving from somewhere
+    else entirely is off-record stock, which the rule above already covers. This
+    is the rule the hero case turns on, and disabling it for repackers - the very
+    customers who reuse outer boxes - would remove the evidence that solves it.
+
     What is *not* here: anything about the label's characters. The label
     likelihood already models misreads and wrong labels, so treating the printed
     code as a hard rule would contradict it and count the same evidence twice.
@@ -65,7 +81,8 @@ def check(
     out += _quality_release(candidates, records, registry)
     if not off_record:
         out += _never_allocated(candidates, intake, registry)
-        out += _quantity(candidates, intake, records)
+        if not intake.consignee_repacks:
+            out += _quantity(candidates, intake, records)
     return out
 
 

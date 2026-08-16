@@ -27,13 +27,37 @@ def _imported_top_level_modules(path: Path) -> set[str]:
     return found
 
 
-def test_agent_package_cannot_import_ground_truth():
-    offenders: list[str] = []
-    for path in sorted((ROOT / "agent").rglob("*.py")):
+def _offenders(package: str, allowed: set[str] = frozenset()) -> list[str]:
+    out: list[str] = []
+    for path in sorted((ROOT / package).rglob("*.py")):
+        if path.name in allowed:
+            continue
         bad = _imported_top_level_modules(path) & FORBIDDEN
         if bad:
-            offenders.append(f"{path.relative_to(ROOT)} imports {sorted(bad)}")
+            out.append(f"{path.relative_to(ROOT)} imports {sorted(bad)}")
+    return out
+
+
+def test_agent_package_cannot_import_ground_truth():
+    offenders = _offenders("agent")
     assert not offenders, "agent/ must not import ground truth:\n" + "\n".join(offenders)
+
+
+def test_the_stock_ledger_cannot_import_ground_truth():
+    """The ledger records what the system believes, not what is true.
+
+    If it could read the answers, a drift measurement of zero would prove
+    nothing - the two sides of the comparison would come from the same place.
+    ``drift.py`` is the one file that is allowed to see both, which is exactly
+    why it is a separate file.
+    """
+    offenders = _offenders("ledger", allowed={"drift.py"})
+    assert not offenders, "ledger/ must not import ground truth:\n" + "\n".join(offenders)
+
+
+def test_drift_is_the_only_place_the_two_sides_meet():
+    """Guard against the rule above being satisfied by moving the import."""
+    assert _imported_top_level_modules(ROOT / "ledger" / "drift.py") & FORBIDDEN
 
 
 def test_the_check_itself_works():

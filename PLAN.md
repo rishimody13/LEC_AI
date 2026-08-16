@@ -664,7 +664,8 @@ LEC_AI/
 │   └── trace.py               decision log
 ├── ledger/
 │   ├── ledger.py              append-only stock movements
-│   └── drift.py               drift measurement
+│   ├── posting.py             turns one agent decision into movements
+│   └── drift.py               drift measurement (the only file that sees both sides)
 ├── downstream/
 │   ├── demand.py              seeded random demand
 │   ├── picking.py             FEFO picker
@@ -773,7 +774,7 @@ If the harm were hypothetical, this test would fail. That is the point.
 | R5a — unreadable | S2 and S3 traces, plus the damaged label images |
 | R5b — readable but conflicting | S4 trace: the check digit stays valid throughout |
 | R6 — all three responses | S1 (trust label), S4 (pay for lookup), S3 (human) |
-| R7 — no drift | Property tests plus drift = 0 for RECONCILE on S1, S2, S4 |
+| R7 — no drift | `test_ledger.py`: append-only enforced by the database, units in equals units out, any decision reversible, checked against generated placements. Drift measured in `ledger/drift.py`, which is the only file allowed to see both the record and the truth |
 | R8 — real harm | `test_harm_is_real.py`, the results table, the drift chart |
 | R9 — it works | `uv sync && uv run demo --scenario S4` on a clean machine, offline |
 | R10 — obvious is wrong | The video; S4 is built for this |

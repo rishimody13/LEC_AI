@@ -16,6 +16,9 @@ from dataclasses import dataclass, field
 from agent import loop
 from agent.harm import CostModel, load_costs
 from agent.reliability import ReliabilityModel, load_reliability
+from ledger import drift as drift_mod
+from ledger import posting
+from ledger.ledger import Ledger
 
 from . import generate, properties
 
@@ -26,7 +29,12 @@ class Outcome:
     description: str
     action: str
     correct: bool
+    #: True when the stock record says the stock lasts longer than it really does.
     dangerous: bool
+    overstated_unit_days: int = 0
+    understated_unit_days: int = 0
+    misattributed_units: int = 0
+    undated_units: int = 0
     breaches: list[properties.Breach] = field(default_factory=list)
 
 
@@ -46,13 +54,22 @@ def run_one(
     case = generate.build(seed, calibrated=calibrated)
     result = loop.run(
         case.intake,
-        generate.GeneratedServices(case),  # type: ignore[arg-type]
+        generate.GeneratedServices(case),
         costs,
         reliability,
         generate.FixedNoteReader(case.note),
         scenario_id=f"gen-{seed}",
     )
-    report = properties.check(case, result, costs)
+
+    # Every decision is written to a ledger, exactly as it would be in the real
+    # system, and the drift is measured off that. The safety figure below is
+    # therefore what the stock record actually says, not a separate calculation
+    # that could quietly drift away from it.
+    book = Ledger()
+    posting.post(book, case.intake, result)
+    drift = drift_mod.measure(book, case.truth_book())
+
+    report = properties.check(case, result, costs, ledger=book)
 
     if result.escalated:
         action = "escalate"
@@ -61,16 +78,16 @@ def run_one(
     else:
         action = "none"
 
-    dangerous = False
-    if result.assigned_batch is not None:
-        dangerous = case.best_before(result.assigned_batch) > case.best_before(case.truth)
-
     return Outcome(
         seed=seed,
         description=case.description,
         action=action,
         correct=result.assigned_batch == case.truth,
-        dangerous=dangerous,
+        dangerous=drift.overstated_unit_days > 0,
+        overstated_unit_days=drift.overstated_unit_days,
+        understated_unit_days=drift.understated_unit_days,
+        misattributed_units=drift.units_misattributed,
+        undated_units=drift.units_without_a_date,
         breaches=report.breaches,
     )
 
@@ -107,6 +124,19 @@ def report(summary: Summary) -> str:
     lines.append(
         f"  expiry too late  {sum(o.dangerous for o in summary.outcomes):5}   "
         f"<- the failure that ships expired stock"
+    )
+
+    over = sum(o.overstated_unit_days for o in summary.outcomes)
+    under = sum(o.understated_unit_days for o in summary.outcomes)
+    lines.append("")
+    lines.append("drift left in the stock record:")
+    lines.append(f"  expiry on the dangerous side  {over:8} unit-days")
+    lines.append(f"  expiry on the wasteful side   {under:8} unit-days")
+    lines.append(
+        f"  units under the wrong batch   {sum(o.misattributed_units for o in summary.outcomes):8}"
+    )
+    lines.append(
+        f"  units with no date at all     {sum(o.undated_units for o in summary.outcomes):8}"
     )
 
     lines.append("")

@@ -23,6 +23,7 @@ from . import belief as belief_mod
 from . import candidates as candidates_mod
 from . import constraints, notes, policy, voi
 from .evidence import (
+    BatchSummary,
     LabelEvidence,
     LedgerEvidence,
     RecordEvidence,
@@ -43,7 +44,7 @@ class Services(Protocol):
 
     def read_label(self, intake: ReturnIntake) -> LabelEvidence: ...
     def query_records(self, intake: ReturnIntake) -> RecordEvidence: ...
-    def batch_catalogue(self, sku_id: str) -> dict[str, object]: ...
+    def batch_catalogue(self, sku_id: str) -> dict[str, BatchSummary]: ...
     def buy_registry(self, batch_ids: list[str]) -> RegistryEvidence: ...
     def buy_ledger(self, intake: ReturnIntake) -> LedgerEvidence: ...
 
@@ -108,9 +109,11 @@ def run(
             off_site_origin=note_facts.off_site_origin,
         )
 
+    # May be empty, when the warehouse system did not answer. `label_likelihood`
+    # treats an empty list as "nothing to check against" rather than as a no.
     known_codes = {label_code(b) for b in catalogue}
     off_record = note_facts.suggests_off_record_stock
-    candidate_set = candidates_mod.build(intake, records, label, catalogue, note_facts)  # type: ignore[arg-type]
+    candidate_set = candidates_mod.build(intake, records, label, catalogue, note_facts)
     from_note = [c.name for c in candidate_set.candidates if c.source == "note"]
     if from_note:
         trace.notes.append(

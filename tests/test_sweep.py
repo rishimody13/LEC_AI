@@ -97,6 +97,35 @@ def test_dangerous_outcomes_stay_rare(calibrated):
     )
 
 
+def test_holding_stock_is_actually_safe(calibrated, miscalibrated):
+    """Segregating buys one thing: an expiry that cannot be too late.
+
+    This has to hold in both worlds. It does not depend on the agent's beliefs
+    being right, only on the hold being dated at the earliest expiry any batch of
+    the product has, so a miscalibrated world is no excuse.
+
+    It was not true until the ledger was built. The hold was dated from the
+    candidates the agent had thought of, which left it later than the truth
+    whenever the stock was a batch nobody named.
+    """
+    for summary in (calibrated, miscalibrated):
+        held = [o for o in summary.outcomes if o.action == "segregate"]
+        assert held, "no case segregated, so this proves nothing"
+        bad = [o for o in held if o.overstated_unit_days > 0]
+        assert not bad, "\n".join(f"seed {o.seed} [{o.description}]" for o in bad)
+
+
+def test_drift_is_only_ever_on_the_safe_side_of_the_expiry(calibrated):
+    """Whatever else it gets wrong, the stock record must not say the stock
+    lasts longer than it does more often than the reliability model predicts."""
+    overstated = sum(o.overstated_unit_days for o in calibrated.outcomes)
+    understated = sum(o.understated_unit_days for o in calibrated.outcomes)
+    assert understated > 0, "no drift at all means the measurement is not running"
+    assert overstated <= understated * 0.01, (
+        f"{overstated} unit-days on the dangerous side against {understated} on the wasteful side"
+    )
+
+
 def test_it_gets_most_of_them_right(calibrated):
     """A sanity floor. An agent that escalated everything would pass the safety
     properties and be useless."""
@@ -124,7 +153,7 @@ def test_structural_properties_hold_in_any_world(seed):
         case = generate.build(seed, calibrated=calibrated_world)
         result = loop.run(
             case.intake,
-            generate.GeneratedServices(case),  # type: ignore[arg-type]
+            generate.GeneratedServices(case),
             COSTS,
             RELIABILITY,
             generate.FixedNoteReader(case.note),

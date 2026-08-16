@@ -35,9 +35,9 @@
     {
       "name": "who to believe",
       "belief": {
-        "B-2288": 0.0962,
-        "B-2290": 0.902,
-        "other": 0.0018
+        "B-2288": 0.0949,
+        "B-2290": 0.8895,
+        "other": 0.0157
       },
       "options": [
         {
@@ -69,34 +69,34 @@
         },
         {
           "action": "segregate -> H-01-01",
-          "expected_cost_gbp": 26.39,
+          "expected_cost_gbp": 42.77,
           "exposure": {
-            "wrong_zone": 0.998,
-            "shelf_waste_unit_day": 606.151,
-            "expired_unit": 0.043,
+            "wrong_zone": 0.984,
+            "shelf_waste_unit_day": 597.713,
+            "expired_unit": 0.376,
             "deferred_review": 1.0,
-            "misattribution_unit": 4.703
+            "misattribution_unit": 5.306
           },
           "fee_gbp": 0.0
         },
         {
           "action": "commit B-2288 -> A-07-02",
-          "expected_cost_gbp": 58.12,
+          "expected_cost_gbp": 73.34,
           "exposure": {
-            "shelf_waste_unit_day": 606.151,
-            "misattribution_unit": 43.297,
-            "wrong_zone": 0.902,
-            "expired_unit": 0.043
+            "shelf_waste_unit_day": 597.713,
+            "misattribution_unit": 42.694,
+            "wrong_zone": 0.889,
+            "expired_unit": 0.376
           },
           "fee_gbp": 0.0
         },
         {
           "action": "commit B-2290 -> A-07-05",
-          "expected_cost_gbp": 228.34,
+          "expected_cost_gbp": 241.2,
           "exposure": {
-            "expired_unit": 4.661,
-            "misattribution_unit": 4.618,
-            "wrong_zone": 0.096
+            "expired_unit": 4.93,
+            "misattribution_unit": 4.553,
+            "wrong_zone": 0.095
           },
           "fee_gbp": 0.0
         }
@@ -125,5 +125,27 @@
   "outcome": "escalated at decision 1",
   "notes": [
     "who to believe: only \u00a30.30 (1.5%) ahead of 'gather batch_registry', which would lead somewhere different. A decision this close rests on a chosen parameter rather than on the evidence."
+  ],
+  "stock_movements": [
+    {
+      "seq": 1,
+      "at": "2026-08-15",
+      "kind": "receipt",
+      "quantity": 48,
+      "from": "SKU-4471 unidentified@no-date in @customer",
+      "to": "SKU-4471 unidentified@no-date in R-00-01",
+      "caused_by": "RET-S5:intake",
+      "reason": "partial return received at goods-in"
+    },
+    {
+      "seq": 2,
+      "at": "2026-08-15",
+      "kind": "putaway",
+      "quantity": 48,
+      "from": "SKU-4471 unidentified@no-date in R-00-01",
+      "to": "SKU-4471 unidentified@no-date in Q-01-01",
+      "caused_by": "RET-S5:placement",
+      "reason": "handed to a person; still unidentified"
+    }
   ]
 }

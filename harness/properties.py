@@ -8,9 +8,12 @@ against cases nobody wrote.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 
 from agent.harm import CostModel
 from agent.loop import Result
+from ledger import drift as drift_mod
+from ledger.ledger import PLACEMENT_STEP, RECEIVING_BIN, Ledger, decision_id
 
 from .generate import Case
 
@@ -34,7 +37,7 @@ class Report:
         return not self.breaches
 
 
-def check(case: Case, result: Result, costs: CostModel) -> Report:
+def check(case: Case, result: Result, costs: CostModel, ledger: Ledger | None = None) -> Report:
     report = Report(checked=1)
 
     _never_overstates_expiry(case, result, report)
@@ -46,7 +49,26 @@ def check(case: Case, result: Result, costs: CostModel) -> Report:
     _spend_within_budget(result, costs, report)
     _truth_is_reachable(case, result, report)
 
+    if ledger is not None:
+        _units_in_equals_units_out(case, ledger, report)
+        _stock_is_never_in_two_places(case, ledger, report)
+        _ledger_records_what_was_decided(result, case, ledger, report)
+        _drift_agrees_with_the_expiry_check(case, result, ledger, report)
+
     return report
+
+
+def _recorded_expiry(result: Result) -> date | None:
+    """The expiry the agent actually wrote against the stock.
+
+    Read off the chosen action rather than looked up from the batch, so a hold
+    placed under a conservative date is measured too. An earlier version only
+    checked commits, which meant segregated stock could carry an expiry later
+    than the truth and nothing would notice.
+    """
+    if result.escalated or result.placement is None:
+        return None
+    return result.placement.chosen.action.recorded_best_before
 
 
 def _never_overstates_expiry(case: Case, result: Result, report: Report) -> None:
@@ -55,15 +77,15 @@ def _never_overstates_expiry(case: Case, result: Result, report: Report) -> None
     It waits until the recorded date and then ships after it has really gone off.
     Recording an earlier date only wastes shelf life.
     """
-    if result.assigned_batch is None:
+    recorded = _recorded_expiry(result)
+    if recorded is None:
         return
-    recorded = case.best_before(result.assigned_batch)
     actual = case.best_before(case.truth)
     if recorded > actual:
+        filed = result.assigned_batch or "held stock"
         report.add(
             "records an expiry later than the truth",
-            f"filed {result.assigned_batch} (expires {recorded}) for stock that "
-            f"really expires {actual}",
+            f"filed {filed} under expiry {recorded} for stock that really expires {actual}",
         )
 
 
@@ -133,6 +155,101 @@ def _spend_within_budget(result: Result, costs: CostModel, report: Report) -> No
         report.add("overspent on lookups", f"£{result.spend_gbp}")
     if result.spend_gbp < 0:
         report.add("negative spend", f"£{result.spend_gbp}")
+
+
+def _units_in_equals_units_out(case: Case, ledger: Ledger, report: Report) -> None:
+    """Nothing is created or lost between the door and the shelf."""
+    try:
+        ledger.check_balances()
+    except Exception as exc:  # noqa: BLE001 - a broken ledger is itself a finding
+        report.add("ledger totals do not match its rows", str(exc))
+        return
+
+    arrived, departed, inside = ledger.flow(case.intake.sku_id)
+    if arrived - departed != inside:
+        report.add(
+            "units in does not equal units out",
+            f"{arrived} in, {departed} out, {inside} on the shelf",
+        )
+    if arrived != case.intake.quantity:
+        report.add(
+            "the ledger did not receive what arrived",
+            f"return was {case.intake.quantity} units, ledger booked in {arrived}",
+        )
+
+
+def _stock_is_never_in_two_places(case: Case, ledger: Ledger, report: Report) -> None:
+    """Every unit ends up at exactly one position, and none of them negative.
+
+    A return that finished should have left goods-in entirely. Stock stuck in
+    two places at once is the shape data drift takes before anyone notices it.
+    """
+    balances = ledger.balances()
+    negative = {str(p): n for p, n in balances.items() if n < 0}
+    if negative:
+        report.add("negative stock", f"{negative}")
+
+    stranded = sum(n for p, n in balances.items() if p.bin_id == RECEIVING_BIN)
+    if stranded:
+        report.add(
+            "stock left in goods-in",
+            f"{stranded} units never got placed anywhere",
+        )
+    total = sum(balances.values())
+    if total != case.intake.quantity:
+        report.add(
+            "stock on the shelf does not match the return",
+            f"{total} units held, return was {case.intake.quantity}",
+        )
+
+
+def _ledger_records_what_was_decided(
+    result: Result, case: Case, ledger: Ledger, report: Report
+) -> None:
+    """The log says what the agent chose, not something close to it.
+
+    Without this the drift figure could look healthy while describing a
+    placement that never happened.
+    """
+    wanted = decision_id(case.intake.return_id, PLACEMENT_STEP)
+    placements = [m for m in ledger.for_return(case.intake.return_id) if m.decision == wanted]
+    if len(placements) != 1:
+        report.add("return was not placed exactly once", f"{len(placements)} placements")
+        return
+    placed = placements[0]
+    if placed.destination.lot.batch_id != result.assigned_batch:
+        report.add(
+            "ledger batch does not match the decision",
+            f"agent chose {result.assigned_batch}, ledger says {placed.destination.lot.batch_id}",
+        )
+    if placed.destination.lot.best_before != _recorded_expiry(result):
+        report.add(
+            "ledger expiry does not match the decision",
+            f"agent used {_recorded_expiry(result)}, ledger says "
+            f"{placed.destination.lot.best_before}",
+        )
+
+
+def _drift_agrees_with_the_expiry_check(
+    case: Case, result: Result, ledger: Ledger, report: Report
+) -> None:
+    """Two ways of asking the same question must give the same answer.
+
+    The safety property reads the chosen action. The drift measurement reads the
+    ledger and compares it with ground truth. They share no code. If they ever
+    disagree, one of them is lying about whether stock went out under a date
+    later than the truth, and the harm numbers rest on both.
+    """
+    drift = drift_mod.measure(ledger, case.truth_book())
+    recorded = _recorded_expiry(result)
+    from_action = recorded is not None and recorded > case.best_before(case.truth)
+    from_ledger = drift.overstated_unit_days > 0
+    if from_action != from_ledger:
+        report.add(
+            "drift and the expiry check disagree",
+            f"action says overstated={from_action}, ledger drift says {from_ledger} "
+            f"({drift.summary()})",
+        )
 
 
 def _truth_is_reachable(case: Case, result: Result, report: Report) -> None:

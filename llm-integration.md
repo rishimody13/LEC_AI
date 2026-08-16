@@ -84,8 +84,13 @@ raises on construction, then runs every case:
 
 ```python
 import anthropic
+
+
 class Boom:
-    def __init__(self, *a, **k): raise AssertionError("LLM call at runtime")
+    def __init__(self, *a, **k):
+        raise AssertionError("LLM call at runtime")
+
+
 anthropic.Anthropic = Boom
 # ... run all cases: they complete
 ```

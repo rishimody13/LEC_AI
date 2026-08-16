@@ -30,46 +30,35 @@
     {
       "name": "who to believe",
       "belief": {
-        "B-2293": 0.9998,
-        "other": 0.0002
+        "B-2293": 1.0,
+        "other": 0.0
       },
       "options": [
         {
           "action": "commit B-2293 -> C-04-03",
-          "expected_cost_gbp": 0.21,
+          "expected_cost_gbp": 0.02,
           "exposure": {
-            "expired_unit": 0.004
+            "expired_unit": 0.0
           },
           "fee_gbp": 0.0
         },
         {
           "action": "gather batch_registry",
-          "expected_cost_gbp": 0.31,
+          "expected_cost_gbp": 0.3,
           "exposure": {},
-          "fee_gbp": 0.31
+          "fee_gbp": 0.3
         },
         {
           "action": "gather shipment_ledger",
-          "expected_cost_gbp": 0.41,
+          "expected_cost_gbp": 0.4,
           "exposure": {},
-          "fee_gbp": 0.41
+          "fee_gbp": 0.4
         },
         {
           "action": "gather batch_registry+shipment_ledger",
-          "expected_cost_gbp": 0.71,
+          "expected_cost_gbp": 0.7,
           "exposure": {},
-          "fee_gbp": 0.71
-        },
-        {
-          "action": "segregate -> H-01-01",
-          "expected_cost_gbp": 7.47,
-          "exposure": {
-            "wrong_zone": 1.0,
-            "expired_unit": 0.004,
-            "deferred_review": 1.0,
-            "misattribution_unit": 0.009
-          },
-          "fee_gbp": 0.0
+          "fee_gbp": 0.7
         },
         {
           "action": "escalate",
@@ -79,44 +68,45 @@
             "expired_unit": 0.2
           },
           "fee_gbp": 0.0
+        },
+        {
+          "action": "segregate -> H-01-01",
+          "expected_cost_gbp": 18.88,
+          "exposure": {
+            "shelf_waste_unit_day": 559.989,
+            "wrong_zone": 1.0,
+            "expired_unit": 0.0,
+            "deferred_review": 1.0,
+            "misattribution_unit": 0.001
+          },
+          "fee_gbp": 0.0
         }
       ],
       "chosen": "commit B-2293 -> C-04-03",
-      "margin_gbp": 0.1,
-      "margin_share": 0.4837,
+      "margin_gbp": 0.28,
+      "margin_share": 15.3955,
       "fragile": false,
       "sensitivity": [
         {
           "parameter": "expired_unit",
           "now_gbp": 48.0,
-          "flips_at_gbp": 71.22,
-          "slack_x": 1.5
+          "flips_at_gbp": 786.98,
+          "slack_x": 16.4
         }
       ]
     },
     {
       "name": "where it goes",
       "belief": {
-        "B-2293": 0.9998,
-        "other": 0.0002
+        "B-2293": 1.0,
+        "other": 0.0
       },
       "options": [
         {
           "action": "commit B-2293 -> C-04-03",
-          "expected_cost_gbp": 0.21,
+          "expected_cost_gbp": 0.02,
           "exposure": {
-            "expired_unit": 0.004
-          },
-          "fee_gbp": 0.0
-        },
-        {
-          "action": "segregate -> H-01-01",
-          "expected_cost_gbp": 7.47,
-          "exposure": {
-            "wrong_zone": 1.0,
-            "expired_unit": 0.004,
-            "deferred_review": 1.0,
-            "misattribution_unit": 0.009
+            "expired_unit": 0.0
           },
           "fee_gbp": 0.0
         },
@@ -128,11 +118,23 @@
             "expired_unit": 0.2
           },
           "fee_gbp": 0.0
+        },
+        {
+          "action": "segregate -> H-01-01",
+          "expected_cost_gbp": 18.88,
+          "exposure": {
+            "shelf_waste_unit_day": 559.989,
+            "wrong_zone": 1.0,
+            "expired_unit": 0.0,
+            "deferred_review": 1.0,
+            "misattribution_unit": 0.001
+          },
+          "fee_gbp": 0.0
         }
       ],
       "chosen": "commit B-2293 -> C-04-03",
-      "margin_gbp": 7.26,
-      "margin_share": 34.6377,
+      "margin_gbp": 18.11,
+      "margin_share": 983.6523,
       "fragile": false,
       "sensitivity": []
     }
@@ -141,5 +143,27 @@
   "outcome": "commit B-2293 -> C-04-03",
   "notes": [
     "where it goes: no single cost figure can be moved to a sensible value that would change this. The decision does not rest on the cost table."
+  ],
+  "stock_movements": [
+    {
+      "seq": 1,
+      "at": "2026-08-15",
+      "kind": "receipt",
+      "quantity": 40,
+      "from": "SKU-4471 unidentified@no-date in @customer",
+      "to": "SKU-4471 unidentified@no-date in R-00-01",
+      "caused_by": "RET-S1:intake",
+      "reason": "partial return received at goods-in"
+    },
+    {
+      "seq": 2,
+      "at": "2026-08-15",
+      "kind": "reclassify",
+      "quantity": 40,
+      "from": "SKU-4471 unidentified@no-date in R-00-01",
+      "to": "SKU-4471 B-2293@2027-05-20 in C-04-03",
+      "caused_by": "RET-S1:placement",
+      "reason": "filed as B-2293"
+    }
   ]
 }
