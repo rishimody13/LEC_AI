@@ -25,10 +25,15 @@ if TYPE_CHECKING:
 #: mis-picks, cross-docked stock, returns of returns.
 UNRECORDED_SHARE = 0.08
 
-#: Used instead when the note says the pallet was mixed or the goods came via
-#: another site. Judged: those notes describe exactly the situations in which
-#: stock arrives without a matching shipment record, so "not on our books" stops
-#: being a long shot. Set at roughly two and a half times the base rate.
+#: Used instead when something tells us the shipment records are incomplete for
+#: this stock - either the note (mixed pallet, cross-dock) or the records
+#: themselves reporting a stale replica or no matching shipment. In those cases
+#: "the answer is not on this list" stops being a long shot. Judged at roughly
+#: two and a half times the base rate.
+#:
+#: Leaving this out was a real failure: with a reused label and a stale replica
+#: the true batch appears in neither source, and the agent was filing the
+#: impostor at 99.9% while holding the evidence that the records were incomplete.
 UNRECORDED_SHARE_OFF_RECORD = 0.20
 
 #: Name used for the "none of the above" candidate.
@@ -72,6 +77,19 @@ class CandidateSet:
     @property
     def names(self) -> list[str]:
         return [c.name for c in self.candidates]
+
+
+def records_look_incomplete(records: RecordEvidence) -> bool:
+    """Do the records say, in effect, that they may be missing something?
+
+    A replica that has not caught up is missing recent shipments by definition.
+    A query that matched nothing for a customer who is returning goods is either
+    missing them or looking in the wrong place. Either way the chance that the
+    answer is not on the list goes up.
+    """
+    from .evidence import RecordSymptom
+
+    return bool(records.symptoms & {RecordSymptom.REPLICA_LAG, RecordSymptom.NO_MATCH})
 
 
 def build(
@@ -179,7 +197,7 @@ def build(
 
     candidates.append(Candidate(batch_id=None, source="catch_all"))
 
-    off_record = bool(note and note.suggests_off_record_stock)
+    off_record = bool(note and note.suggests_off_record_stock) or records_look_incomplete(records)
     return CandidateSet(
         candidates=candidates,
         prior=_prior(candidates, catalogue, off_record=off_record),

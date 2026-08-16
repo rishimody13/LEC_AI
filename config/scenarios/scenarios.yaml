@@ -132,7 +132,7 @@ X-wms-down:
   # beats both committing and calling a person.
   observed_outcome: segregate
   observed_batch: null
-  observed_gathers: true
+  observed_gathers: false
 
 X-wms-conflicting:
   name: Contradictory warehouse rows

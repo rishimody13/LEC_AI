@@ -2,6 +2,7 @@
 
 **Updated:** 2026-08-16 · **Plan:** [PLAN.md](./PLAN.md) · **Brief:** [objectives.md](./objectives.md)
 · **Agent design options:** [architecture-options.md](./architecture-options.md)
+· **Where the model is used:** [llm-integration.md](./llm-integration.md)
 
 Phases P0 to P4 are done. The agent works end to end on all ten test cases: it reads the
 evidence, works out probabilities, decides who to believe, and decides where the stock goes.
@@ -54,21 +55,22 @@ Decision logs for every case are in `artifacts/traces/`.
 
 | File | Tests | What it covers |
 |---|---:|---|
-| `test_generalises.py` | 203 | Properties across 1-400 units, not recorded outcomes |
+| `test_generalises.py` | 203 | Properties across 1-400 units on the hand-written cases |
+| `test_sweep.py` | 47 | The agent against generated cases nobody wrote |
 | `test_agent.py` | 33 | The agent end to end, including the no-default-branch check |
-| `test_scenarios.py` | 19 | Each case wires up; each source fails on its own |
-| `test_constraints.py` | 11 | Physical rules vs rules that assume complete records |
 | `test_confusion.py` | 21 | Which characters ink and shape can turn into which |
-| `test_label_reader.py` | 16 | Validating a reading: check digits, symptoms, missing recordings |
+| `test_scenarios.py` | 19 | Each case wires up; each source fails on its own |
 | `test_world.py` | 17 | The warehouse is consistent and the hero case is misleading |
+| `test_label_reader.py` | 16 | Validating a reading: check digits, symptoms, missing recordings |
+| `test_constraints.py` | 11 | Physical rules vs rules that assume complete records |
 | `test_harm.py` | 10 | Cost model derivations and break-even arithmetic |
 | `test_lookups.py` | 9 | The paid lookups, and the fact that settles the hero case |
-| `test_voi.py` | 8 | Whether a lookup is worth buying, including jointly-decisive pairs |
 | `test_labels.py` | 8 | Damage profiles really damage the image |
+| `test_voi.py` | 8 | Whether a lookup is worth buying, including jointly-decisive pairs |
 | `test_wms_client.py` | 8 | Each warehouse fault leaves the right symptom |
 | `test_coding.py` | 5 | Check digits, including the exhaustive single-digit proof |
 | `test_isolation.py` | 2 | `agent/` cannot import ground truth |
-| **Total** | **370** | |
+| **Total** | **417** | |
 
 ---
 
@@ -423,6 +425,76 @@ The trace for S4 shows the whole story:
 
 The option it rejected is priced in the same table: **committing to B-2291 would have cost
 £4,112**. That number is the video.
+
+### Generated test cases, instead of hand-written ones
+
+Every bug found in this project hid behind the same thing: eight cases written by hand, each
+added once the code could already handle it. Anything the code got wrong was invisible,
+because no case exercised it.
+
+`harness/` now builds cases from a seed. A fresh warehouse, fresh batches with a spread of
+expiry dates, a fresh customer who may or may not repack, random shipments, a randomly chosen
+truth, and a randomly chosen fault on each source. Nothing in the generator knows what the
+agent is supposed to answer.
+
+**Real versus synthetic.** The warehouse, the database, the shipment records, the batch
+registry and the shipment ledger are all real — the generated world is loaded into the same
+SQLite schema and read through the same service classes with the same fault switches. Only
+the label reading and the note extraction are synthetic, because rendering and reading
+thousands of images is not practical; a reading is constructed and put through the real
+validation code instead. Perception is covered separately by the image tests.
+
+**Two worlds, and the difference matters.**
+
+- *Calibrated*: faults occur at the rates `config/reliability.yaml` says they do. A failure
+  here is a reasoning failure, because the agent's beliefs match the world it is in.
+- *Miscalibrated*: every fault is equally likely, which is not what the model believes.
+  Failures there mean the beliefs are wrong rather than the reasoning, so only the properties
+  that must hold regardless are asserted.
+
+Getting that distinction wrong wasted a pass: the first version drew wrong labels at 17% for
+every customer, while the model believes 1% for ordinary customers and 17% for repackers. The
+agent looked broken when it was reasoning correctly under its stated beliefs.
+
+**What it found immediately.** On the first run, 3% of cases recorded an expiry **later** than
+the truth — the failure that ships expired stock. Two real modelling errors, neither reachable
+from the eight hand-written cases:
+
+1. **The records could report their own incompleteness and the agent ignored it.** With a
+   reused label *and* a stale replica, the true batch appears in neither source. The records
+   came back carrying both `replica_lag` and `no_match` — the agent literally held the evidence
+   that they were stale and empty — and it still filed the impostor batch at 99.96%. The
+   chance that the answer is not on the list now rises when the records say they may be
+   missing something. The eight cases never combined those two faults: the hero case has a
+   reused label with healthy records, and the stale-replica case has a correct label.
+
+2. **The catch-all was scored as a special kind of thing.** It had a flat likelihood of 0.05,
+   which loses to any named candidate under almost any evidence — including evidence that says
+   nothing at all. It is not special: it is a batch we have not named, so it is now scored
+   exactly like a named batch the evidence does not point at.
+
+**Where it stands.** Over 3,000 calibrated cases: 1,737 of 1,805 commits correct, and 10 cases
+recording a late expiry — 0.55%, down from 3%. The remaining ones are not reducible. In each,
+a reused box carries another real batch's label, the replica is too far behind to list the real
+shipment, and the note says nothing: no evidence anywhere names the true batch. Believing a
+clean label from a customer whose labels are wrong 1% of the time is correct, and being wrong
+1% of the time is what that belief means. The sweep is showing the model's own predicted error
+rate, not a bug.
+
+In the miscalibrated world the same agent files 385 of 492 correct and 42 late expiries. That
+gap between the two worlds is the cost of the reliability numbers being hand-set rather than
+learned, measured rather than asserted.
+
+**Wired in as a gate.** `tests/test_sweep.py` runs 400 generated cases in each world on every
+test run and fails if nothing crashes becomes untrue, if a structural property breaks, or if
+the late-expiry rate rises above 2% in the calibrated world. Run a bigger sweep by hand:
+
+```bash
+uv run python -m harness.sweep 3000
+uv run python -m harness.sweep 1500 --miscalibrated
+```
+
+Every breach prints the seed that produced it, so any failure reproduces on its own.
 
 ### Full build audit
 

@@ -27,10 +27,14 @@ from .evidence import (
 )
 from .reliability import LabelState, RecordState, ReliabilityModel
 
-# The catch-all explains any evidence equally badly. Giving it a flat likelihood
-# means it wins mass on its own whenever no named candidate fits, which is the
-# signature of a candidate list that is missing something.
-CATCH_ALL_LIKELIHOOD = 0.05
+# The catch-all is not a special kind of thing. It is a batch we have not named,
+# so it should be scored exactly like a named batch that the evidence does not
+# point at: absent from the records, and not the code on the label.
+#
+# Giving it a flat low number instead was a real failure. Evidence that said
+# nothing at all - empty records from a stale replica - still crushed it, because
+# a flat 0.05 loses to any named candidate under almost any evidence. The agent
+# ended up 99.9% sure of a batch that came from a reused box.
 
 # Floor for a likelihood, so nothing is ever driven to exactly zero.
 FLOOR = 1e-9
@@ -158,7 +162,9 @@ def label_likelihood(
 
     for c in candidates.candidates:
         if c.is_catch_all:
-            out[c.name] = CATCH_ALL_LIKELIHOOD
+            # Its code is unknown, so it can never be what we read correctly and
+            # can never be a misreading of it. Only the wrong-label story is left.
+            out[c.name] = max(states[LabelState.WRONG_LABEL] * share, FLOOR)
             continue
 
         true_code = label_code(c.batch_id) if c.batch_id else ""
@@ -211,11 +217,8 @@ def record_likelihood(
     out: dict[str, float] = {}
 
     for c in candidates.candidates:
-        if c.is_catch_all:
-            out[c.name] = CATCH_ALL_LIKELIHOOD
-            continue
-
-        present = c.batch_id in on_record
+        # A batch we have not named is, by definition, not in the record set.
+        present = (not c.is_catch_all) and c.batch_id in on_record
 
         # Records complete and correct: the true batch has to be in the set.
         p_ok = states[RecordState.OK] * (1.0 if present else 0.02)
@@ -273,10 +276,10 @@ def dispatch_likelihood(
 
     out: dict[str, float] = {}
     for c in candidates.candidates:
-        if c.is_catch_all:
-            out[c.name] = CATCH_ALL_LIKELIHOOD
-            continue
-        out[c.name] = 0.95 if c.batch_id in seen else 0.10
+        # Same treatment as the records: an unnamed batch was never going to
+        # appear in the scans, so it scores as any unseen batch does.
+        was_seen = (not c.is_catch_all) and c.batch_id in seen
+        out[c.name] = 0.95 if was_seen else 0.10
     return out
 
 
