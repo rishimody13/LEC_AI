@@ -1,6 +1,7 @@
 # Build status
 
-**Updated:** 2026-08-15 · **Plan:** [PLAN.md](./PLAN.md) · **Brief:** [objectives.md](./objectives.md)
+**Updated:** 2026-08-16 · **Plan:** [PLAN.md](./PLAN.md) · **Brief:** [objectives.md](./objectives.md)
+· **Agent design options:** [architecture-options.md](./architecture-options.md)
 
 Phases P0 (setup), P1 (the warehouse world) and P2 (evidence sources) are done. All the
 evidence the agent will work from now exists. Nothing works out probabilities or makes a
@@ -230,10 +231,11 @@ Two readings worth noting:
   characters that survive, but a chunk of the code is physically gone. That is a different
   failure from S5, and the symptoms distinguish them.
 
-**Model choice:** `ClaudeLabelReader` defaults to `claude-opus-5`, not the `claude-sonnet-5`
-named in the plan. Current guidance is to default to the most capable model and let the user
-downgrade deliberately rather than choosing a cheaper one on their behalf. It is a
-constructor argument, so it is a one-line change.
+**Model choice:** `ClaudeLabelReader` uses `claude-sonnet-5`. Reading a damaged label is a
+narrow perception job and the hard part is restraint — not guessing at characters that are
+not there — which Sonnet holds better than Haiku on these images. It is a constructor
+argument (`DEFAULT_VISION_MODEL`), so switching to `claude-haiku-4-5` is one line if
+recording cost matters more.
 
 ### Tests added (50 more, 79 total)
 
@@ -254,7 +256,15 @@ constructor argument, so it is a one-line change.
 
 ### P3 — Working out probabilities (next)
 
+Read [architecture-options.md](./architecture-options.md) before starting. It compares nine
+agent designs and recommends keeping the current one with four changes, three of which land
+in this phase: a hard-constraint layer separate from the likelihoods, a guard against
+double-counting the registry and ledger (they derive from the same dispatch events), and
+conformal calibration of the commit threshold using the simulator.
+
 - [x] `agent/evidence.py` — what the agent is allowed to see *(done in P2)*
+- [ ] `agent/constraints.py` — physical impossibilities as hard checks, kept separate from
+      the hand-set likelihoods (see architecture-options.md §9)
 - [ ] `agent/confusion.py` — which characters look alike (`1/l/I`, `0/O/D`, `5/S`, `8/B`)
 - [ ] `agent/reliability.py` — failure rates per source per symptom, stored as counts
 - [ ] `agent/hypotheses.py` — build the candidate list, including the "none of the above"

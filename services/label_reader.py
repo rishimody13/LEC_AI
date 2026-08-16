@@ -154,10 +154,19 @@ class UnavailableLabelReader:
         )
 
 
+#: Reading a damaged label is a narrow perception job, and the hard part is
+#: restraint - not guessing at characters that are not there. Sonnet is the
+#: default because it holds that line more reliably than Haiku on the degraded
+#: images; swap in "claude-haiku-4-5" if recording cost matters more.
+DEFAULT_VISION_MODEL = "claude-sonnet-5"
+
+
 class ClaudeLabelReader:
     """Reads the image with Claude. Used to record cassettes; needs an API key."""
 
-    def __init__(self, model: str = "claude-opus-5", record_to: Path | str | None = None) -> None:
+    def __init__(
+        self, model: str = DEFAULT_VISION_MODEL, record_to: Path | str | None = None
+    ) -> None:
         self._model = model
         self._record_to = Path(record_to) if record_to else None
 
