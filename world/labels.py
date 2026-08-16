@@ -1,8 +1,7 @@
 """Draws carton labels, then damages them.
 
-The damage is real image damage, not a flag on a data structure. Whatever reads
-these images has to cope with actual glare, blur and missing characters, which is
-what makes the label reader a component that can genuinely fail.
+The damage is real image damage, not a flag on a data structure. Anything reading
+these images has to cope with actual glare, blur and missing characters.
 """
 
 from __future__ import annotations
@@ -67,6 +66,10 @@ class Damage:
     tear: bool = False
     tear_top: int = 132
     tear_bottom: int = 262
+    #: Index of a single character to blot with ink, leaving the rest legible.
+    #: This is corruption rather than destruction: the code still reads as a
+    #: code, it just reads as the wrong one.
+    blot_index: int | None = None
 
 
 CLEAN = Damage(name="clean")
@@ -88,8 +91,13 @@ TORN_PIECE = Damage(name="torn_piece", tear=True, target="tail", noise=2)
 check digit and the best-before date with it. The code reads ``B-229``, which fits both
 B-2290 and B-2291, and both the check digit and the date that would settle it are gone."""
 
+INK_BLOT = Damage(name="ink_blot", blot_index=5, noise=3)
+"""Case S8 - a blot of ink fills the hole in one digit. The code stays perfectly
+legible; it just no longer says what was printed. This is the brief's *corrupted*
+metadata, as opposed to the unreadable kind."""
+
 PROFILES: dict[str, Damage] = {
-    d.name: d for d in [CLEAN, WATER_DAMAGE, HEAVY_GLARE, PARTIAL_GLARE, TORN_PIECE]
+    d.name: d for d in [CLEAN, WATER_DAMAGE, HEAVY_GLARE, PARTIAL_GLARE, TORN_PIECE, INK_BLOT]
 }
 
 
@@ -203,6 +211,33 @@ def _jittered_run(
     return pts
 
 
+def _blot(
+    img: Image.Image,
+    index: int,
+    box: tuple[int, int, int, int],
+    code: str,
+    rng: random.Random,
+) -> None:
+    """Drop a blot of ink into one character, closing its open shape."""
+    left, top, right, bottom = box
+    per_char = (right - left) / max(len(code), 1)
+    x0 = left + per_char * index
+    cx = x0 + per_char * 0.52
+    cy = (top + bottom) / 2
+
+    draw = ImageDraw.Draw(img)
+    # Fill only the counter - the hole in the middle of the glyph - so the outer
+    # strokes survive and the character still reads as a digit, just a different
+    # one. Covering the whole glyph would make it unreadable, which is a
+    # different failure and one the other profiles already cover.
+    draw.ellipse([cx - 4.0, cy - 8, cx + 4.0, cy + 8], fill=_INK)
+    for _ in range(10):
+        sx = cx + rng.uniform(-5.5, 5.5)
+        sy = cy + rng.uniform(-10, 10)
+        r = rng.uniform(0.6, 1.5)
+        draw.ellipse([sx - r, sy - r, sx + r, sy + r], fill=_INK)
+
+
 def _tear(
     img: Image.Image,
     damage: Damage,
@@ -288,6 +323,9 @@ def _apply_damage(
     if damage.name == "clean":
         return img
 
+    if damage.blot_index is not None:
+        _blot(img, damage.blot_index, box, code, rng)
+
     if damage.tear:
         img = _tear(img, damage, box, code, rng)
 
@@ -367,6 +405,8 @@ SCENARIO_DAMAGE: dict[str, str] = {
     "RET-S4": "clean",
     "RET-S5": "partial_glare",
     "RET-S6": "torn_piece",
+    "RET-S7": "water_damage",
+    "RET-S8": "ink_blot",
 }
 
 

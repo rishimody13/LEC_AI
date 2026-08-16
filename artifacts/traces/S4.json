@@ -1,0 +1,214 @@
+{
+  "return_id": "RET-S4",
+  "scenario_id": "S4",
+  "evidence": [
+    {
+      "source": "label",
+      "detail": "Label is clean and well lit; the lot code and best-before date are sharp and unambiguous.",
+      "code": "B-2291-4",
+      "confidence": 0.96,
+      "check_digit_ok": true,
+      "symptoms": [
+        "clean_image",
+        "repacking_consignee"
+      ],
+      "bucket": "clean_valid_repacker"
+    },
+    {
+      "source": "records",
+      "detail": "",
+      "batches": [
+        "B-2288",
+        "B-2290"
+      ],
+      "lag_hours": 0.0,
+      "symptoms": [
+        "multiple_matches"
+      ],
+      "bucket": "fresh_multiple_matches"
+    },
+    {
+      "source": "note",
+      "detail": "The outer sleeve had been re-taped and the inner cases carry a print date of 12 September 2025; the customer says it was an over-order and the goods are unopened.",
+      "print_dates": [
+        "2025-09-12"
+      ],
+      "batch_codes_mentioned": [],
+      "repacked": true,
+      "mixed_pallet": false,
+      "off_site_origin": false
+    },
+    {
+      "source": "constraint",
+      "detail": "B-2291 cleared quality control on 2026-06-28, after the earliest shipment to this customer left on 2026-06-02",
+      "rule": "quality_release_after_shipment"
+    },
+    {
+      "source": "constraint",
+      "detail": "B-2291 has never been allocated to CUST-118",
+      "rule": "never_allocated_to_customer"
+    }
+  ],
+  "decisions": [
+    {
+      "name": "who to believe",
+      "belief": {
+        "B-2288": 0.2228,
+        "B-2290": 0.1551,
+        "B-2291": 0.6186,
+        "other": 0.0036
+      },
+      "options": [
+        {
+          "action": "gather batch_registry",
+          "expected_cost_gbp": 19.03,
+          "exposure": {},
+          "fee_gbp": 19.03
+        },
+        {
+          "action": "gather batch_registry+shipment_ledger",
+          "expected_cost_gbp": 19.43,
+          "exposure": {},
+          "fee_gbp": 19.43
+        },
+        {
+          "action": "escalate",
+          "expected_cost_gbp": 28.69,
+          "exposure": {
+            "human_review": 1.0,
+            "expired_unit": 0.42
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "gather shipment_ledger",
+          "expected_cost_gbp": 29.09,
+          "exposure": {},
+          "fee_gbp": 29.09
+        },
+        {
+          "action": "segregate -> H-01-01",
+          "expected_cost_gbp": 64.04,
+          "exposure": {
+            "wrong_zone": 0.996,
+            "shelf_waste_unit_day": 909.859,
+            "expired_unit": 0.149,
+            "deferred_review": 1.0,
+            "misattribution_unit": 32.041
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "commit B-2288 -> A-07-02",
+          "expected_cost_gbp": 90.07,
+          "exposure": {
+            "shelf_waste_unit_day": 909.859,
+            "misattribution_unit": 64.99,
+            "wrong_zone": 0.774,
+            "expired_unit": 0.149
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "commit B-2290 -> A-07-05",
+          "expected_cost_gbp": 974.95,
+          "exposure": {
+            "expired_unit": 18.861,
+            "misattribution_unit": 70.67,
+            "wrong_zone": 0.841
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "commit B-2291 -> C-04-01",
+          "expected_cost_gbp": 1562.08,
+          "exposure": {
+            "expired_unit": 31.892,
+            "misattribution_unit": 31.742,
+            "wrong_zone": 0.378
+          },
+          "fee_gbp": 0.0
+        }
+      ],
+      "chosen": "gather batch_registry",
+      "margin_gbp": 0.4,
+      "margin_share": 0.021,
+      "fragile": false,
+      "sensitivity": []
+    },
+    {
+      "name": "where it goes",
+      "belief": {
+        "B-2288": 0.8483,
+        "B-2290": 0.1504,
+        "B-2291": 0.0,
+        "other": 0.0013
+      },
+      "options": [
+        {
+          "action": "commit B-2288 -> A-07-02",
+          "expected_cost_gbp": 18.73,
+          "exposure": {
+            "shelf_waste_unit_day": 176.858,
+            "misattribution_unit": 12.633,
+            "wrong_zone": 0.15,
+            "expired_unit": 0.054
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "segregate -> H-01-01",
+          "expected_cost_gbp": 25.76,
+          "exposure": {
+            "wrong_zone": 0.999,
+            "shelf_waste_unit_day": 176.858,
+            "expired_unit": 0.054,
+            "deferred_review": 1.0,
+            "misattribution_unit": 12.742
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "escalate",
+          "expected_cost_gbp": 28.69,
+          "exposure": {
+            "human_review": 1.0,
+            "expired_unit": 0.42
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "commit B-2290 -> A-07-05",
+          "expected_cost_gbp": 3493.23,
+          "exposure": {
+            "expired_unit": 71.313,
+            "misattribution_unit": 71.259,
+            "wrong_zone": 0.848
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "commit B-2291 -> C-04-01",
+          "expected_cost_gbp": 4112.03,
+          "exposure": {
+            "expired_unit": 83.945,
+            "misattribution_unit": 83.891,
+            "wrong_zone": 0.999
+          },
+          "fee_gbp": 0.0
+        }
+      ],
+      "chosen": "commit B-2288 -> A-07-02",
+      "margin_gbp": 7.03,
+      "margin_share": 0.3756,
+      "fragile": false,
+      "sensitivity": []
+    }
+  ],
+  "spend_gbp": 0.3,
+  "outcome": "commit B-2288 -> A-07-02",
+  "notes": [
+    "who to believe: no single cost figure can be moved to a sensible value that would change this. The decision does not rest on the cost table.",
+    "where it goes: no single cost figure can be moved to a sensible value that would change this. The decision does not rest on the cost table."
+  ]
+}

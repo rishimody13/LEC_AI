@@ -1,0 +1,169 @@
+{
+  "return_id": "RET-S8",
+  "scenario_id": "S8",
+  "evidence": [
+    {
+      "source": "label",
+      "detail": "A blot of ink sits inside the fifth digit, leaving only thin gaps above and below it. That reads as an 8, though a filled 0 would look similar. Every other character is crisp and the best-before line is clean.",
+      "code": "B-2298-5",
+      "confidence": 0.55,
+      "check_digit_ok": false,
+      "symptoms": [
+        "blur",
+        "check_digit_failed",
+        "low_confidence"
+      ],
+      "bucket": "check_digit_failed"
+    },
+    {
+      "source": "records",
+      "detail": "",
+      "batches": [
+        "B-2290",
+        "B-2291"
+      ],
+      "lag_hours": 0.0,
+      "symptoms": [
+        "multiple_matches"
+      ],
+      "bucket": "fresh_multiple_matches"
+    }
+  ],
+  "decisions": [
+    {
+      "name": "who to believe",
+      "belief": {
+        "B-2290": 0.757,
+        "B-2291": 0.192,
+        "other": 0.051
+      },
+      "options": [
+        {
+          "action": "gather batch_registry",
+          "expected_cost_gbp": 12.23,
+          "exposure": {},
+          "fee_gbp": 12.23
+        },
+        {
+          "action": "gather shipment_ledger",
+          "expected_cost_gbp": 12.33,
+          "exposure": {},
+          "fee_gbp": 12.33
+        },
+        {
+          "action": "gather batch_registry+shipment_ledger",
+          "expected_cost_gbp": 12.63,
+          "exposure": {},
+          "fee_gbp": 12.63
+        },
+        {
+          "action": "escalate",
+          "expected_cost_gbp": 19.09,
+          "exposure": {
+            "human_review": 1.0,
+            "expired_unit": 0.22
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "commit B-2290 -> A-07-05",
+          "expected_cost_gbp": 62.33,
+          "exposure": {
+            "misattribution_unit": 8.449,
+            "wrong_zone": 0.192,
+            "expired_unit": 1.121
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "segregate -> H-01-01",
+          "expected_cost_gbp": 71.22,
+          "exposure": {
+            "wrong_zone": 0.949,
+            "expired_unit": 1.121,
+            "deferred_review": 1.0,
+            "misattribution_unit": 10.691
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "commit B-2291 -> C-04-01",
+          "expected_cost_gbp": 1686.23,
+          "exposure": {
+            "expired_unit": 34.43,
+            "misattribution_unit": 33.309,
+            "wrong_zone": 0.757
+          },
+          "fee_gbp": 0.0
+        }
+      ],
+      "chosen": "gather batch_registry",
+      "margin_gbp": 0.1,
+      "margin_share": 0.0082,
+      "fragile": false,
+      "sensitivity": []
+    },
+    {
+      "name": "where it goes",
+      "belief": {
+        "B-2290": 0.7954,
+        "B-2291": 0.2018,
+        "other": 0.0028
+      },
+      "options": [
+        {
+          "action": "commit B-2290 -> A-07-05",
+          "expected_cost_gbp": 11.93,
+          "exposure": {
+            "misattribution_unit": 8.877,
+            "wrong_zone": 0.202,
+            "expired_unit": 0.062
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "segregate -> H-01-01",
+          "expected_cost_gbp": 18.86,
+          "exposure": {
+            "wrong_zone": 0.997,
+            "expired_unit": 0.062,
+            "deferred_review": 1.0,
+            "misattribution_unit": 9.001
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "escalate",
+          "expected_cost_gbp": 19.09,
+          "exposure": {
+            "human_review": 1.0,
+            "expired_unit": 0.22
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "commit B-2291 -> C-04-01",
+          "expected_cost_gbp": 1718.2,
+          "exposure": {
+            "expired_unit": 35.061,
+            "misattribution_unit": 34.999,
+            "wrong_zone": 0.795
+          },
+          "fee_gbp": 0.0
+        }
+      ],
+      "chosen": "commit B-2290 -> A-07-05",
+      "margin_gbp": 6.94,
+      "margin_share": 0.5815,
+      "fragile": false,
+      "sensitivity": []
+    }
+  ],
+  "spend_gbp": 0.3,
+  "outcome": "commit B-2290 -> A-07-05",
+  "notes": [
+    "label named ['B-2298'], which is not a known batch; its weight went to the catch-all",
+    "who to believe: no single cost figure can be moved to a sensible value that would change this. The decision does not rest on the cost table.",
+    "where it goes: no single cost figure can be moved to a sensible value that would change this. The decision does not rest on the cost table."
+  ]
+}

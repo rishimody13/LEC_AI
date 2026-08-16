@@ -1,8 +1,8 @@
 """Manufacturing and quality-release facts for a batch. A paid lookup.
 
-This is the service that cracks the hero case. It knows when a batch was released
-from quality hold and which customers it has ever been allocated to, which is
-enough to show that a batch could not possibly have been in a given shipment.
+It knows when a batch was released from quality hold and which customers it has
+been allocated to. Together those two facts can show that a batch could not have
+been in a given shipment. That is what settles the hero case.
 """
 
 from __future__ import annotations

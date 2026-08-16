@@ -1,0 +1,68 @@
+# How often each evidence source is wrong, split by the warning signs visible at
+# the time.
+#
+# These are counts of resolved returns, not probabilities. A rate is worked out as
+# (count + 1) / (total + number of states), so a bucket with almost no history
+# returns something near even rather than claiming certainty.
+#
+# The counts below are a seeded history. They are updated as real returns are
+# resolved by a human, a stock count or a complaint.
+
+# The label channel can be in three states.
+#   ok          - the label says what is really in the box
+#   misread     - the box is labelled right, we read it wrong
+#   wrong_label - we read it right, but the label does not match the contents
+#
+# The third one is the dangerous one because it has no visual symptom. A reused
+# outer box carries a crisp, valid, high-confidence label.
+label:
+  clean_valid_standard:
+    ok: 612
+    misread: 4
+    wrong_label: 5
+  clean_valid_repacker:
+    ok: 86
+    misread: 2
+    wrong_label: 17
+  incomplete_code:
+    ok: 140
+    misread: 31
+    wrong_label: 9
+  check_digit_failed:
+    ok: 6
+    misread: 61
+    wrong_label: 8
+  low_confidence:
+    ok: 31
+    misread: 44
+    wrong_label: 6
+  no_code_found:
+    ok: 1
+    misread: 1
+    wrong_label: 1
+
+# The warehouse system can be in three states.
+#   ok         - the records are complete and correct
+#   incomplete - real shipments are missing, with no error raised
+#   corrupted  - rows are present but wrong
+records:
+  fresh_single_match:
+    ok: 1204
+    incomplete: 3
+    corrupted: 3
+  fresh_multiple_matches:
+    ok: 340
+    incomplete: 30
+    corrupted: 21
+  replica_lag:
+    ok: 22
+    incomplete: 45
+    corrupted: 2
+  conflicting_rows:
+    ok: 10
+    incomplete: 5
+    corrupted: 60
+  no_match:
+    ok: 40
+    incomplete: 55
+    corrupted: 5

@@ -1,0 +1,129 @@
+{
+  "return_id": "RET-S5",
+  "scenario_id": "S5",
+  "evidence": [
+    {
+      "source": "label",
+      "detail": "A bright reflection sits over the end of the lot code; the first five characters are legible, the following digit is doubtful and the check digit cannot be made out. The best-before line is unaffected.",
+      "code": "B-2290",
+      "confidence": 0.62,
+      "check_digit_ok": null,
+      "symptoms": [
+        "blur",
+        "glare",
+        "incomplete_code",
+        "low_confidence",
+        "repacking_consignee"
+      ],
+      "bucket": "incomplete_code"
+    },
+    {
+      "source": "records",
+      "detail": "read from a replica last synchronised 2026-07-10; anything dispatched after that date is not visible here; replica may be missing recent shipments",
+      "batches": [
+        "B-2288"
+      ],
+      "lag_hours": 847.0,
+      "symptoms": [
+        "replica_lag",
+        "single_match"
+      ],
+      "bucket": "replica_lag"
+    }
+  ],
+  "decisions": [
+    {
+      "name": "who to believe",
+      "belief": {
+        "B-2288": 0.0962,
+        "B-2290": 0.902,
+        "other": 0.0018
+      },
+      "options": [
+        {
+          "action": "escalate",
+          "expected_cost_gbp": 20.05,
+          "exposure": {
+            "human_review": 1.0,
+            "expired_unit": 0.24
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "gather batch_registry",
+          "expected_cost_gbp": 20.35,
+          "exposure": {},
+          "fee_gbp": 20.35
+        },
+        {
+          "action": "gather shipment_ledger",
+          "expected_cost_gbp": 20.45,
+          "exposure": {},
+          "fee_gbp": 20.45
+        },
+        {
+          "action": "gather batch_registry+shipment_ledger",
+          "expected_cost_gbp": 20.75,
+          "exposure": {},
+          "fee_gbp": 20.75
+        },
+        {
+          "action": "segregate -> H-01-01",
+          "expected_cost_gbp": 26.39,
+          "exposure": {
+            "wrong_zone": 0.998,
+            "shelf_waste_unit_day": 606.151,
+            "expired_unit": 0.043,
+            "deferred_review": 1.0,
+            "misattribution_unit": 4.703
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "commit B-2288 -> A-07-02",
+          "expected_cost_gbp": 58.12,
+          "exposure": {
+            "shelf_waste_unit_day": 606.151,
+            "misattribution_unit": 43.297,
+            "wrong_zone": 0.902,
+            "expired_unit": 0.043
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "commit B-2290 -> A-07-05",
+          "expected_cost_gbp": 228.34,
+          "exposure": {
+            "expired_unit": 4.661,
+            "misattribution_unit": 4.618,
+            "wrong_zone": 0.096
+          },
+          "fee_gbp": 0.0
+        }
+      ],
+      "chosen": "escalate",
+      "margin_gbp": 0.3,
+      "margin_share": 0.015,
+      "fragile": true,
+      "sensitivity": [
+        {
+          "parameter": "expired_unit",
+          "now_gbp": 48.0,
+          "flips_at_gbp": 49.25,
+          "slack_x": 1.0
+        },
+        {
+          "parameter": "human_review",
+          "now_gbp": 8.53,
+          "flips_at_gbp": 8.83,
+          "slack_x": 1.0
+        }
+      ]
+    }
+  ],
+  "spend_gbp": 0.0,
+  "outcome": "escalated at decision 1",
+  "notes": [
+    "who to believe: only \u00a30.30 (1.5%) ahead of 'gather batch_registry', which would lead somewhere different. A decision this close rests on a chosen parameter rather than on the evidence."
+  ]
+}

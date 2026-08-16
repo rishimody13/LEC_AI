@@ -1,10 +1,9 @@
 """Batch code formatting and check digits.
 
-A batch has a short id like ``B-2288``. What gets printed on a carton is the full
-label code ``B-2288-0``, where the trailing digit is a check digit over the four
-body digits. Changing any single body digit always breaks the check digit, which
-is the point: it lets a reader tell "I misread a character" apart from "this label
-genuinely says something else".
+A batch has a short id like B-2288. The carton prints the full label code
+B-2288-0, where the last digit is a check digit over the four body digits.
+Changing any single body digit always breaks the check digit. That is how a reader
+tells a misread character apart from a genuinely different code.
 """
 
 from __future__ import annotations

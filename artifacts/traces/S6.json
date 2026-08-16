@@ -1,0 +1,240 @@
+{
+  "return_id": "RET-S6",
+  "scenario_id": "S6",
+  "evidence": [
+    {
+      "source": "label",
+      "detail": "A piece of the label has been torn away exposing the carton beneath; the first five characters of the lot code are crisp, but the remaining digit, the check digit and the best-before date are physically missing.",
+      "code": "B-229",
+      "confidence": 0.93,
+      "check_digit_ok": null,
+      "symptoms": [
+        "date_unreadable",
+        "incomplete_code",
+        "torn"
+      ],
+      "bucket": "incomplete_code"
+    },
+    {
+      "source": "records",
+      "detail": "",
+      "batches": [
+        "B-2290",
+        "B-2291"
+      ],
+      "lag_hours": 0.0,
+      "symptoms": [
+        "multiple_matches"
+      ],
+      "bucket": "fresh_multiple_matches"
+    },
+    {
+      "source": "constraint",
+      "detail": "B-2293 has never been allocated to CUST-204",
+      "rule": "never_allocated_to_customer"
+    },
+    {
+      "source": "constraint",
+      "detail": "B-2296 has never been allocated to CUST-204",
+      "rule": "never_allocated_to_customer"
+    }
+  ],
+  "decisions": [
+    {
+      "name": "who to believe",
+      "belief": {
+        "B-2290": 0.2299,
+        "B-2291": 0.7074,
+        "B-2293": 0.0397,
+        "B-2296": 0.0226,
+        "other": 0.0004
+      },
+      "options": [
+        {
+          "action": "gather batch_registry",
+          "expected_cost_gbp": 14.64,
+          "exposure": {},
+          "fee_gbp": 14.64
+        },
+        {
+          "action": "gather shipment_ledger",
+          "expected_cost_gbp": 14.89,
+          "exposure": {},
+          "fee_gbp": 14.89
+        },
+        {
+          "action": "gather batch_registry+shipment_ledger",
+          "expected_cost_gbp": 15.04,
+          "exposure": {},
+          "fee_gbp": 15.04
+        },
+        {
+          "action": "escalate",
+          "expected_cost_gbp": 15.73,
+          "exposure": {
+            "human_review": 1.0,
+            "expired_unit": 0.15
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "segregate -> H-01-01",
+          "expected_cost_gbp": 15.98,
+          "exposure": {
+            "wrong_zone": 1.0,
+            "expired_unit": 0.006,
+            "deferred_review": 1.0,
+            "misattribution_unit": 8.777
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "commit B-2290 -> A-07-05",
+          "expected_cost_gbp": 24.11,
+          "exposure": {
+            "misattribution_unit": 23.09,
+            "wrong_zone": 0.77,
+            "expired_unit": 0.006
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "commit B-2291 -> C-04-01",
+          "expected_cost_gbp": 340.41,
+          "exposure": {
+            "expired_unit": 6.904,
+            "misattribution_unit": 8.765,
+            "wrong_zone": 0.292
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "commit B-2293 -> C-04-03",
+          "expected_cost_gbp": 1379.75,
+          "exposure": {
+            "expired_unit": 28.126,
+            "misattribution_unit": 28.798,
+            "wrong_zone": 0.96
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "commit B-2296 -> A-07-08",
+          "expected_cost_gbp": 1437.38,
+          "exposure": {
+            "expired_unit": 29.316,
+            "misattribution_unit": 29.31,
+            "wrong_zone": 0.977
+          },
+          "fee_gbp": 0.0
+        }
+      ],
+      "chosen": "gather batch_registry",
+      "margin_gbp": 0.25,
+      "margin_share": 0.017,
+      "fragile": false,
+      "sensitivity": []
+    },
+    {
+      "name": "where it goes",
+      "belief": {
+        "B-2290": 0.2453,
+        "B-2291": 0.7546,
+        "B-2293": 0.0,
+        "B-2296": 0.0,
+        "other": 0.0
+      },
+      "options": [
+        {
+          "action": "segregate -> H-01-01",
+          "expected_cost_gbp": 14.34,
+          "exposure": {
+            "wrong_zone": 1.0,
+            "expired_unit": 0.0,
+            "deferred_review": 1.0,
+            "misattribution_unit": 7.361
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "escalate",
+          "expected_cost_gbp": 15.73,
+          "exposure": {
+            "human_review": 1.0,
+            "expired_unit": 0.15
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "commit B-2290 -> A-07-05",
+          "expected_cost_gbp": 23.36,
+          "exposure": {
+            "misattribution_unit": 22.641,
+            "wrong_zone": 0.755,
+            "expired_unit": 0.0
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "commit B-2291 -> C-04-01",
+          "expected_cost_gbp": 360.78,
+          "exposure": {
+            "expired_unit": 7.358,
+            "misattribution_unit": 7.36,
+            "wrong_zone": 0.245
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "commit B-2293 -> C-04-03",
+          "expected_cost_gbp": 1470.81,
+          "exposure": {
+            "expired_unit": 29.998,
+            "misattribution_unit": 29.998,
+            "wrong_zone": 1.0
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "commit B-2296 -> A-07-08",
+          "expected_cost_gbp": 1470.88,
+          "exposure": {
+            "expired_unit": 29.999,
+            "misattribution_unit": 29.999,
+            "wrong_zone": 1.0
+          },
+          "fee_gbp": 0.0
+        }
+      ],
+      "chosen": "segregate -> H-01-01",
+      "margin_gbp": 1.4,
+      "margin_share": 0.0974,
+      "fragile": false,
+      "sensitivity": [
+        {
+          "parameter": "human_review",
+          "now_gbp": 8.53,
+          "flips_at_gbp": 7.14,
+          "slack_x": 1.2
+        },
+        {
+          "parameter": "misattribution_unit",
+          "now_gbp": 0.96,
+          "flips_at_gbp": 1.15,
+          "slack_x": 1.2
+        },
+        {
+          "parameter": "expired_unit",
+          "now_gbp": 48.0,
+          "flips_at_gbp": 38.67,
+          "slack_x": 1.2
+        }
+      ]
+    }
+  ],
+  "spend_gbp": 0.3,
+  "outcome": "segregate -> H-01-01",
+  "notes": [
+    "who to believe: no single cost figure can be moved to a sensible value that would change this. The decision does not rest on the cost table."
+  ]
+}

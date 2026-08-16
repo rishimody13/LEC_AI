@@ -1,0 +1,87 @@
+# What things cost.
+#
+# This file stores the basis, not the answer. Every figure the agent uses is
+# worked out in agent/harm.py from the parameters below, so changing a wage or a
+# margin updates everything that depends on it.
+#
+# Each parameter says where it comes from:
+#   definition - a number we chose that defines the world, not a harm estimate
+#   derived    - can be worked out from something we already know
+#   judged     - a real judgement that cannot be worked out
+
+basis:
+  # definition: the product we invented. Everything else scales off it.
+  unit_cost_gbp: 11.40
+
+  # derived: distributor gross margin on ambient grocery is about 12-18%.
+  gross_margin_fraction: 0.15
+
+  # derived: 18-month best-before window on infant formula.
+  shelf_life_days: 550
+
+  # derived: how long stock normally sits before it is picked and sold. Recording
+  # an expiry earlier than the truth only costs anything if it cuts into this
+  # window. Losing 100 days off a date that is still a year away costs nothing.
+  sell_through_days: 60
+
+  # derived: UK inventory analyst, £32k salary x 1.4 overhead / 1,750 hours.
+  # The old £14.00 per review implied £42/hour, which was 1.6x too high and made
+  # the agent escalate less than it should.
+  analyst_hourly_gbp: 25.60
+  review_minutes: 20
+
+  # derived: segregated stock still has to be identified eventually, but it is
+  # done in a batch with other held items and at low priority, so there is no
+  # per-item setup. Same basis as review_minutes, just less of it.
+  deferred_review_minutes: 12
+
+  # derived: extra pick travel when stock is filed in the wrong zone.
+  pick_detour_minutes: 5
+
+  # derived: the retailer charges us for failing to supply, as a share of the
+  # value of the shortfall. Grocery penalties usually run 15-30%.
+  non_supply_penalty_fraction: 0.25
+
+  # derived: annual cost of holding stock (capital, space, insurance, shrink).
+  annual_holding_rate: 0.22
+
+  # judged: chance that any given batch is subject to a recall or a trace request
+  # during its life. Low, but it is what makes a wrong batch record cost anything
+  # even when the expiry we recorded was safe.
+  batch_trace_probability: 0.02
+
+  # judged, but narrow: how often a human analyst who investigates a return still
+  # files it wrong. Treating a person as always right makes escalation look free
+  # and the agent hands everything over instead of deciding.
+  human_error_rate: 0.01
+
+  # derived: daily admin while a customer waits on a backorder - chasing,
+  # paperwork, part deliveries. Kept small on purpose: backordering has to stay
+  # cheaper than scrapping for a long time, or the agent would scrap stock.
+  backorder_admin_per_unit_day_gbp: 0.15
+
+judged:
+  # The only figure in this file we cannot work out from anything else. Covers
+  # recall handling, replacement, admin and goodwill for one unit that reaches a
+  # customer after its real best-before date.
+  #
+  # The hero case's decision to buy a lookup sits about 26x above the value where
+  # it would flip (see architecture-options.md section 12.4), so this number would
+  # have to be very wrong to change it. The bin decision is more sensitive.
+  expired_unit_gbp: 48.00
+
+prices:
+  # definition: our own service prices.
+  batch_registry_gbp: 0.30
+  shipment_ledger_gbp: 0.40
+
+# Relationships that must hold. Checked when the file loads, so a bad edit fails
+# straight away instead of quietly changing how the agent behaves.
+invariants:
+  # Shipping expired stock must be worse than scrapping it.
+  expired_worse_than_scrap: true
+  # Failing to supply must be cheaper than scrapping, or the agent would destroy
+  # stock rather than put a customer on backorder.
+  stockout_cheaper_than_scrap: true
+  # And backordering must stay the cheaper option for at least this many days.
+  min_backorder_days_before_scrap_is_better: 30

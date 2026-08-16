@@ -1,11 +1,11 @@
 """What the agent is allowed to see.
 
 Every service hands back one of these. Nothing here exposes the true batch, and
-nothing here imports the world package - that separation is what makes the harm
-numbers later on mean anything.
+nothing here imports the world package. Without that split the harm numbers later
+would be meaningless.
 
-Each piece of evidence carries its own *symptoms*: the warning signs that were
-visible when it was produced. The agent uses those to judge how much to trust it.
+Each piece of evidence carries its own symptoms: the warning signs visible when it
+was produced. The agent uses those to decide how much to trust it.
 """
 
 from __future__ import annotations
@@ -123,6 +123,15 @@ class RecordEvidence(BaseModel):
             if s.batch_id not in seen:
                 seen.append(s.batch_id)
         return seen
+
+
+class BatchSummary(BaseModel):
+    """Stock facts the warehouse system already holds. Free, part of the same query."""
+
+    batch_id: str
+    best_before: date
+    home_bin: str
+    quantity_on_hand: int
 
 
 class BatchRecord(BaseModel):

@@ -1,0 +1,175 @@
+{
+  "return_id": "RET-S1",
+  "scenario_id": "X-wms-conflicting",
+  "evidence": [
+    {
+      "source": "label",
+      "detail": "Label is clean, flat and evenly lit; all printed fields are crisp.",
+      "code": "B-2293-2",
+      "confidence": 0.97,
+      "check_digit_ok": true,
+      "symptoms": [
+        "clean_image"
+      ],
+      "bucket": "clean_valid_standard"
+    },
+    {
+      "source": "records",
+      "detail": "shipment SH-77501 appears twice naming different batches",
+      "batches": [
+        "B-2293",
+        "B-2288"
+      ],
+      "lag_hours": 0.0,
+      "symptoms": [
+        "conflicting_rows",
+        "duplicate_rows",
+        "multiple_matches"
+      ],
+      "bucket": "conflicting_rows"
+    },
+    {
+      "source": "constraint",
+      "detail": "B-2288 has never been allocated to CUST-455",
+      "rule": "never_allocated_to_customer"
+    }
+  ],
+  "decisions": [
+    {
+      "name": "who to believe",
+      "belief": {
+        "B-2293": 0.9961,
+        "B-2288": 0.0033,
+        "other": 0.0006
+      },
+      "options": [
+        {
+          "action": "gather batch_registry",
+          "expected_cost_gbp": 0.34,
+          "exposure": {},
+          "fee_gbp": 0.34
+        },
+        {
+          "action": "gather batch_registry+shipment_ledger",
+          "expected_cost_gbp": 0.74,
+          "exposure": {},
+          "fee_gbp": 0.74
+        },
+        {
+          "action": "gather shipment_ledger",
+          "expected_cost_gbp": 1.11,
+          "exposure": {},
+          "fee_gbp": 1.11
+        },
+        {
+          "action": "commit B-2293 -> C-04-03",
+          "expected_cost_gbp": 7.02,
+          "exposure": {
+            "expired_unit": 0.144,
+            "misattribution_unit": 0.131,
+            "wrong_zone": 0.003
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "segregate -> H-01-01",
+          "expected_cost_gbp": 14.29,
+          "exposure": {
+            "wrong_zone": 0.999,
+            "expired_unit": 0.144,
+            "deferred_review": 1.0,
+            "misattribution_unit": 0.156
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "escalate",
+          "expected_cost_gbp": 18.13,
+          "exposure": {
+            "human_review": 1.0,
+            "expired_unit": 0.2
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "commit B-2288 -> A-07-02",
+          "expected_cost_gbp": 52.54,
+          "exposure": {
+            "shelf_waste_unit_day": 557.813,
+            "misattribution_unit": 39.844,
+            "wrong_zone": 0.996,
+            "expired_unit": 0.013
+          },
+          "fee_gbp": 0.0
+        }
+      ],
+      "chosen": "gather batch_registry",
+      "margin_gbp": 0.4,
+      "margin_share": 1.1804,
+      "fragile": false,
+      "sensitivity": []
+    },
+    {
+      "name": "where it goes",
+      "belief": {
+        "B-2293": 1.0,
+        "B-2288": 0.0,
+        "other": 0.0
+      },
+      "options": [
+        {
+          "action": "commit B-2293 -> C-04-03",
+          "expected_cost_gbp": 0.04,
+          "exposure": {
+            "expired_unit": 0.001,
+            "misattribution_unit": 0.0,
+            "wrong_zone": 0.0
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "segregate -> H-01-01",
+          "expected_cost_gbp": 7.29,
+          "exposure": {
+            "wrong_zone": 1.0,
+            "expired_unit": 0.001,
+            "deferred_review": 1.0,
+            "misattribution_unit": 0.001
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "escalate",
+          "expected_cost_gbp": 18.13,
+          "exposure": {
+            "human_review": 1.0,
+            "expired_unit": 0.2
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "commit B-2288 -> A-07-02",
+          "expected_cost_gbp": 52.17,
+          "exposure": {
+            "shelf_waste_unit_day": 559.979,
+            "misattribution_unit": 39.999,
+            "wrong_zone": 1.0,
+            "expired_unit": 0.001
+          },
+          "fee_gbp": 0.0
+        }
+      ],
+      "chosen": "commit B-2293 -> C-04-03",
+      "margin_gbp": 7.25,
+      "margin_share": 186.5926,
+      "fragile": false,
+      "sensitivity": []
+    }
+  ],
+  "spend_gbp": 0.3,
+  "outcome": "commit B-2293 -> C-04-03",
+  "notes": [
+    "who to believe: no single cost figure can be moved to a sensible value that would change this. The decision does not rest on the cost table.",
+    "where it goes: no single cost figure can be moved to a sensible value that would change this. The decision does not rest on the cost table."
+  ]
+}

@@ -1,4 +1,14 @@
 {
+  "3bf4cc614d7684d5": {
+    "best_before": "2026-11-30",
+    "code_complete": true,
+    "code_text": "B-2298-5",
+    "confidence": 0.55,
+    "note": "A blot of ink sits inside the fifth digit, leaving only thin gaps above and below it. That reads as an 8, though a filled 0 would look similar. Every other character is crisp and the best-before line is clean.",
+    "visual_condition": [
+      "smudge"
+    ]
+  },
   "491922184f634f51": {
     "best_before": null,
     "code_complete": false,
@@ -19,6 +29,18 @@
     "note": "Label is clean, flat and evenly lit; all printed fields are crisp.",
     "visual_condition": [
       "clean"
+    ]
+  },
+  "8c4cfdf8b62f64c9": {
+    "best_before": null,
+    "code_complete": false,
+    "code_text": null,
+    "confidence": 0.0,
+    "note": "The whole label face is water damaged and blurred; the lot code area is washed out and nothing can be made out.",
+    "visual_condition": [
+      "water_damage",
+      "blur",
+      "low_contrast"
     ]
   },
   "be9be29fdacc6890": {

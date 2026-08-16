@@ -1,0 +1,137 @@
+{
+  "return_id": "RET-S7",
+  "scenario_id": "S7",
+  "evidence": [
+    {
+      "source": "label",
+      "detail": "The whole label face is water damaged and blurred; the lot code area is washed out and nothing can be made out.",
+      "code": null,
+      "confidence": 0.0,
+      "check_digit_ok": null,
+      "symptoms": [
+        "blur",
+        "date_unreadable",
+        "low_confidence",
+        "no_code_found"
+      ],
+      "bucket": "no_code_found"
+    },
+    {
+      "source": "records",
+      "detail": "",
+      "batches": [
+        "B-2293"
+      ],
+      "lag_hours": 0.0,
+      "symptoms": [
+        "single_match"
+      ],
+      "bucket": "fresh_single_match"
+    },
+    {
+      "source": "note",
+      "detail": "The goods were cross-docked from the Halden depot with no paperwork, the label is water damaged, and the inner cases carry the lot code B-2296.",
+      "print_dates": [],
+      "batch_codes_mentioned": [
+        "B-2296"
+      ],
+      "repacked": false,
+      "mixed_pallet": false,
+      "off_site_origin": true
+    }
+  ],
+  "decisions": [
+    {
+      "name": "who to believe",
+      "belief": {
+        "B-2293": 0.7504,
+        "B-2296": 0.2271,
+        "other": 0.0225
+      },
+      "options": [
+        {
+          "action": "escalate",
+          "expected_cost_gbp": 21.01,
+          "exposure": {
+            "human_review": 1.0,
+            "expired_unit": 0.26
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "gather batch_registry",
+          "expected_cost_gbp": 21.31,
+          "exposure": {},
+          "fee_gbp": 21.31
+        },
+        {
+          "action": "gather shipment_ledger",
+          "expected_cost_gbp": 21.41,
+          "exposure": {},
+          "fee_gbp": 21.41
+        },
+        {
+          "action": "gather batch_registry+shipment_ledger",
+          "expected_cost_gbp": 21.71,
+          "exposure": {},
+          "fee_gbp": 21.71
+        },
+        {
+          "action": "commit B-2293 -> C-04-03",
+          "expected_cost_gbp": 39.88,
+          "exposure": {
+            "misattribution_unit": 11.811,
+            "wrong_zone": 0.227,
+            "expired_unit": 0.584
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "segregate -> H-01-01",
+          "expected_cost_gbp": 47.72,
+          "exposure": {
+            "wrong_zone": 0.978,
+            "expired_unit": 0.584,
+            "deferred_review": 1.0,
+            "misattribution_unit": 12.98
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "commit B-2296 -> A-07-08",
+          "expected_cost_gbp": 1940.1,
+          "exposure": {
+            "expired_unit": 39.605,
+            "misattribution_unit": 39.02,
+            "wrong_zone": 0.75
+          },
+          "fee_gbp": 0.0
+        }
+      ],
+      "chosen": "escalate",
+      "margin_gbp": 0.3,
+      "margin_share": 0.0143,
+      "fragile": true,
+      "sensitivity": [
+        {
+          "parameter": "expired_unit",
+          "now_gbp": 48.0,
+          "flips_at_gbp": 49.15,
+          "slack_x": 1.0
+        },
+        {
+          "parameter": "human_review",
+          "now_gbp": 8.53,
+          "flips_at_gbp": 8.83,
+          "slack_x": 1.0
+        }
+      ]
+    }
+  ],
+  "spend_gbp": 0.0,
+  "outcome": "escalated at decision 1",
+  "notes": [
+    "the note named ['B-2296'], which neither the records nor the label mention; added as candidates after checking they are real batches",
+    "who to believe: only \u00a30.30 (1.4%) ahead of 'gather batch_registry', which would lead somewhere different. A decision this close rests on a chosen parameter rather than on the evidence."
+  ]
+}

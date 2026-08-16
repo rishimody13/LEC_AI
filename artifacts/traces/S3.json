@@ -1,0 +1,151 @@
+{
+  "return_id": "RET-S3",
+  "scenario_id": "S3",
+  "evidence": [
+    {
+      "source": "label",
+      "detail": "A strong reflection covers the lot code and the best-before line; only a partial year is visible on the date and none of the lot code can be read.",
+      "code": null,
+      "confidence": 0.0,
+      "check_digit_ok": null,
+      "symptoms": [
+        "blur",
+        "date_unreadable",
+        "glare",
+        "low_confidence",
+        "no_code_found",
+        "occluded"
+      ],
+      "bucket": "no_code_found"
+    },
+    {
+      "source": "records",
+      "detail": "",
+      "batches": [
+        "B-2288",
+        "B-2293",
+        "B-2296"
+      ],
+      "lag_hours": 0.0,
+      "symptoms": [
+        "multiple_matches"
+      ],
+      "bucket": "fresh_multiple_matches"
+    },
+    {
+      "source": "note",
+      "detail": "The pallet held more than one product and the paperwork is missing.",
+      "print_dates": [],
+      "batch_codes_mentioned": [],
+      "repacked": false,
+      "mixed_pallet": true,
+      "off_site_origin": false
+    }
+  ],
+  "decisions": [
+    {
+      "name": "who to believe",
+      "belief": {
+        "B-2288": 0.2962,
+        "B-2293": 0.4364,
+        "B-2296": 0.2486,
+        "other": 0.0187
+      },
+      "options": [
+        {
+          "action": "escalate",
+          "expected_cost_gbp": 22.93,
+          "exposure": {
+            "human_review": 1.0,
+            "expired_unit": 0.3
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "gather batch_registry",
+          "expected_cost_gbp": 23.23,
+          "exposure": {},
+          "fee_gbp": 23.23
+        },
+        {
+          "action": "gather shipment_ledger",
+          "expected_cost_gbp": 23.33,
+          "exposure": {},
+          "fee_gbp": 23.33
+        },
+        {
+          "action": "gather batch_registry+shipment_ledger",
+          "expected_cost_gbp": 23.63,
+          "exposure": {},
+          "fee_gbp": 23.63
+        },
+        {
+          "action": "segregate -> H-01-01",
+          "expected_cost_gbp": 78.57,
+          "exposure": {
+            "wrong_zone": 0.981,
+            "shelf_waste_unit_day": 575.434,
+            "expired_unit": 0.562,
+            "deferred_review": 1.0,
+            "misattribution_unit": 33.815
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "commit B-2288 -> A-07-02",
+          "expected_cost_gbp": 79.81,
+          "exposure": {
+            "shelf_waste_unit_day": 575.434,
+            "misattribution_unit": 41.102,
+            "wrong_zone": 0.685,
+            "expired_unit": 0.562
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "commit B-2293 -> C-04-03",
+          "expected_cost_gbp": 912.66,
+          "exposure": {
+            "expired_unit": 18.336,
+            "misattribution_unit": 32.691,
+            "wrong_zone": 0.545
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "commit B-2296 -> A-07-08",
+          "expected_cost_gbp": 2180.76,
+          "exposure": {
+            "expired_unit": 44.521,
+            "misattribution_unit": 43.959,
+            "wrong_zone": 0.733
+          },
+          "fee_gbp": 0.0
+        }
+      ],
+      "chosen": "escalate",
+      "margin_gbp": 0.3,
+      "margin_share": 0.0131,
+      "fragile": true,
+      "sensitivity": [
+        {
+          "parameter": "expired_unit",
+          "now_gbp": 48.0,
+          "flips_at_gbp": 49.0,
+          "slack_x": 1.0
+        },
+        {
+          "parameter": "human_review",
+          "now_gbp": 8.53,
+          "flips_at_gbp": 8.83,
+          "slack_x": 1.0
+        }
+      ]
+    }
+  ],
+  "spend_gbp": 0.0,
+  "outcome": "escalated at decision 1",
+  "notes": [
+    "who to believe: only \u00a30.30 (1.3%) ahead of 'gather batch_registry', which would lead somewhere different. A decision this close rests on a chosen parameter rather than on the evidence."
+  ]
+}

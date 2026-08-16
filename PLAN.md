@@ -207,7 +207,7 @@ flowchart TB
 
     subgraph C["Agent"]
         REL["Reliability model\nhow often each source fails,\nby symptom"]
-        HYP["Candidate answers\n(LLM helps generate)"]
+        HYP["Candidate answers\n(records, label, and\ncodes the model reads\nout of the note)"]
         BEL["Belief update\nprobability per answer"]
         POL["Action chooser\ncosts Commit / Gather /\nSegregate / Escalate,\npicks cheapest"]
         HM["Cost table (£)"]

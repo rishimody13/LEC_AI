@@ -39,7 +39,11 @@ class Scenario:
     label_damage: str
     label_reader: str
     faults: ServiceFaults
-    expected_action: str
+    # What the agent does today, recorded after the fact. Not an independent
+    # expectation - see the note in scenarios.yaml.
+    observed_outcome: str
+    observed_batch: str | None
+    observed_gathers: bool
 
 
 @dataclass
@@ -97,7 +101,9 @@ def load_scenarios(path: Path | str = SCENARIOS_PATH) -> dict[str, Scenario]:
             label_damage=entry["label_damage"],
             label_reader=entry.get("label_reader", "cassette"),
             faults=_faults(entry),
-            expected_action=entry["expected_action"],
+            observed_outcome=entry["observed_outcome"],
+            observed_batch=entry.get("observed_batch"),
+            observed_gathers=bool(entry.get("observed_gathers", False)),
         )
     return out
 

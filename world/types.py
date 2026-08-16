@@ -1,7 +1,7 @@
 """Ground truth entities.
 
-Everything in this module describes what is *actually* true in the warehouse.
-The agent package must never import it — see tests/test_isolation.py.
+Everything here describes what is actually true in the warehouse. The agent
+package must never import it - see tests/test_isolation.py.
 """
 
 from __future__ import annotations
@@ -80,6 +80,9 @@ class ReturnEvent(BaseModel):
     arrived: date
 
     true_batch_id: str
+    #: True when the stock did not come from any shipment we have on record -
+    #: cross-docked, transferred between sites, or a return of a return.
+    off_record: bool = False
 
     #: What is physically printed on the carton. May belong to a different batch
     #: entirely if the customer reused an outer box.

@@ -10,7 +10,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import date, datetime, time
 
-from agent.evidence import RecordEvidence, RecordSymptom, ShipmentRecord
+from agent.evidence import BatchSummary, RecordEvidence, RecordSymptom, ShipmentRecord
 
 from .faults import WmsFaults
 
@@ -121,6 +121,55 @@ class WmsClient:
             symptoms=symptoms,
             warnings=warnings,
         )
+
+    def batch_summaries(self, batch_ids: list[str]) -> dict[str, BatchSummary]:
+        """Expiry and home bin for batches we hold.
+
+        Free: the warehouse system already knows this about its own stock. It is
+        the manufacturing and allocation history that costs money, and that lives
+        in the batch registry.
+        """
+        if not batch_ids or self._faults.timeout:
+            return {}
+        placeholders = ",".join("?" * len(batch_ids))
+        rows = self._conn.execute(
+            f"SELECT batch_id, best_before, home_bin, quantity_on_hand "
+            f"FROM batches WHERE batch_id IN ({placeholders})",
+            batch_ids,
+        ).fetchall()
+        return {
+            r["batch_id"]: BatchSummary(
+                batch_id=r["batch_id"],
+                best_before=date.fromisoformat(r["best_before"]),
+                home_bin=r["home_bin"],
+                quantity_on_hand=r["quantity_on_hand"],
+            )
+            for r in rows
+        }
+
+    def catalogue(self, sku_id: str) -> dict[str, BatchSummary]:
+        """Every batch of this product the warehouse knows about.
+
+        Free, same as batch_summaries. The agent needs it to work out which
+        batches a partial code could belong to, otherwise a batch missing from a
+        stale shipment record could never become a candidate at all.
+        """
+        if self._faults.timeout:
+            return {}
+        rows = self._conn.execute(
+            "SELECT batch_id, best_before, home_bin, quantity_on_hand "
+            "FROM batches WHERE sku_id = ? ORDER BY batch_id",
+            (sku_id,),
+        ).fetchall()
+        return {
+            r["batch_id"]: BatchSummary(
+                batch_id=r["batch_id"],
+                best_before=date.fromisoformat(r["best_before"]),
+                home_bin=r["home_bin"],
+                quantity_on_hand=r["quantity_on_hand"],
+            )
+            for r in rows
+        }
 
     def _other_batch(self, batch_id: str, sku_id: str) -> str | None:
         row = self._conn.execute(

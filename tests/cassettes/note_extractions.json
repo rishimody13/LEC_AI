@@ -1,0 +1,70 @@
+{
+  "2997ca0f0eddceb2": {
+    "batch_codes_mentioned": [],
+    "mixed_pallet": false,
+    "off_site_origin": false,
+    "print_dates": [],
+    "repacked": false,
+    "summary": "Part of the label was torn off while the pallet was being broken down."
+  },
+  "2faa1e90c7bc90e2": {
+    "batch_codes_mentioned": [],
+    "mixed_pallet": false,
+    "off_site_origin": false,
+    "print_dates": [],
+    "repacked": false,
+    "summary": "The pallet wrap failed and water damaged the face of the label."
+  },
+  "8f3184a17b95d6ac": {
+    "batch_codes_mentioned": [],
+    "mixed_pallet": true,
+    "off_site_origin": false,
+    "print_dates": [],
+    "repacked": false,
+    "summary": "The pallet held more than one product and the paperwork is missing."
+  },
+  "a0fb277ea105c369": {
+    "batch_codes_mentioned": [],
+    "mixed_pallet": false,
+    "off_site_origin": false,
+    "print_dates": [],
+    "repacked": false,
+    "summary": "Ink transferred onto the label from the pallet label; the goods themselves are undamaged."
+  },
+  "b2e42c944d58f9dd": {
+    "batch_codes_mentioned": [
+      "B-2296"
+    ],
+    "mixed_pallet": false,
+    "off_site_origin": true,
+    "print_dates": [],
+    "repacked": false,
+    "summary": "The goods were cross-docked from the Halden depot with no paperwork, the label is water damaged, and the inner cases carry the lot code B-2296."
+  },
+  "b7b6873edb29e119": {
+    "batch_codes_mentioned": [],
+    "mixed_pallet": false,
+    "off_site_origin": false,
+    "print_dates": [],
+    "repacked": false,
+    "summary": "Two outer cases were crushed in transit but the contents are undamaged."
+  },
+  "bebe9f25f742e0b9": {
+    "batch_codes_mentioned": [],
+    "mixed_pallet": false,
+    "off_site_origin": false,
+    "print_dates": [
+      "2025-09-12"
+    ],
+    "repacked": true,
+    "summary": "The outer sleeve had been re-taped and the inner cases carry a print date of 12 September 2025; the customer says it was an over-order and the goods are unopened."
+  },
+  "c9b49a821422defc": {
+    "batch_codes_mentioned": [],
+    "mixed_pallet": false,
+    "off_site_origin": false,
+    "print_dates": [],
+    "repacked": false,
+    "summary": "A chiller door was left open overnight and a temperature log is attached."
+  }
+}

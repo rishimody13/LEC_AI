@@ -1,8 +1,7 @@
 """What was physically scanned out of the door. A paid lookup.
 
-Independent of the warehouse system: these are door scans, so a stale warehouse
-replica does not affect them. That independence is what makes this lookup worth
-buying when the warehouse system is the suspect source.
+These are door scans, so a stale warehouse replica does not affect them. That is
+why this lookup is worth buying when the warehouse system is the suspect source.
 """
 
 from __future__ import annotations

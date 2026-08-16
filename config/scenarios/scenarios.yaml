@@ -1,6 +1,11 @@
 # One entry per test case. Faults are configuration, not code paths - adding a
 # seventh case needs no code change.
 #
+# The observed_* fields record what the agent actually does today. They are NOT
+# independent expectations: they were written down after running the code, so a
+# test asserting them only detects change. The properties that are genuinely
+# asserted live in tests/test_generalises.py.
+#
 # label_reader:  cassette | unavailable
 # label_damage:  a profile name from world.labels.PROFILES
 # wms:           fault switches for the warehouse system query
@@ -12,7 +17,9 @@ S1:
   return_id: RET-S1
   label_damage: clean
   label_reader: cassette
-  expected_action: commit
+  observed_outcome: commit
+  observed_batch: B-2293
+  observed_gathers: false
 
 S2:
   name: Unreadable label
@@ -20,7 +27,9 @@ S2:
   return_id: RET-S2
   label_damage: water_damage
   label_reader: cassette
-  expected_action: commit
+  observed_outcome: commit
+  observed_batch: B-2293
+  observed_gathers: true
 
 S3:
   name: Nothing to go on
@@ -28,7 +37,9 @@ S3:
   return_id: RET-S3
   label_damage: heavy_glare
   label_reader: cassette
-  expected_action: escalate
+  observed_outcome: escalate
+  observed_batch: null
+  observed_gathers: false
 
 S4:
   name: The obvious answer is wrong
@@ -38,7 +49,9 @@ S4:
   return_id: RET-S4
   label_damage: clean
   label_reader: cassette
-  expected_action: gather
+  observed_outcome: commit
+  observed_batch: B-2288
+  observed_gathers: true
 
 S5:
   name: Both sources degraded
@@ -51,7 +64,9 @@ S5:
   label_reader: cassette
   wms:
     stale_as_of: 2026-07-10
-  expected_action: gather
+  observed_outcome: escalate
+  observed_batch: null
+  observed_gathers: false
 
 S6:
   name: Near-miss twins
@@ -61,7 +76,36 @@ S6:
   return_id: RET-S6
   label_damage: torn_piece
   label_reader: cassette
-  expected_action: gather
+  observed_outcome: segregate
+  observed_batch: null
+  observed_gathers: true
+
+S7:
+  name: The answer is only in the note
+  description: >
+    Cross-docked stock with no delivery paperwork and a soaked label. Neither the
+    records nor the label name the batch. The only place it appears is written out
+    in the condition note, which a database query cannot read.
+  return_id: RET-S7
+  label_damage: water_damage
+  label_reader: cassette
+  observed_outcome: escalate
+  observed_batch: null
+  observed_gathers: false
+
+S8:
+  name: Corrupted, not unreadable
+  description: >
+    A blot of ink has filled the hole in one digit. The code is perfectly legible
+    and reads B-2298-5, which is not a batch that exists - and the check digit
+    does not agree, which is the tell. The character confusion table is what
+    works out which real code it was.
+  return_id: RET-S8
+  label_damage: ink_blot
+  label_reader: cassette
+  observed_outcome: commit
+  observed_batch: B-2290
+  observed_gathers: true
 
 # Extra cases used only by the failure-isolation tests, to show each source can
 # fail on its own without the other one being touched.
@@ -71,7 +115,9 @@ X-label-down:
   return_id: RET-S1
   label_damage: clean
   label_reader: unavailable
-  expected_action: commit
+  observed_outcome: commit
+  observed_batch: B-2293
+  observed_gathers: true
 
 X-wms-down:
   name: Warehouse system timeout
@@ -81,7 +127,12 @@ X-wms-down:
   label_reader: cassette
   wms:
     timeout: true
-  expected_action: commit
+  # The label still reads perfectly, so its batch goes on the list even though
+  # nothing can be verified. With no home bin to file it in, holding the stock
+  # beats both committing and calling a person.
+  observed_outcome: segregate
+  observed_batch: null
+  observed_gathers: true
 
 X-wms-conflicting:
   name: Contradictory warehouse rows
@@ -91,7 +142,9 @@ X-wms-conflicting:
   label_reader: cassette
   wms:
     conflicting_rows: true
-  expected_action: commit
+  observed_outcome: commit
+  observed_batch: B-2293
+  observed_gathers: true
 
 X-registry-down:
   name: Paid lookup unavailable
@@ -101,4 +154,6 @@ X-registry-down:
   label_reader: cassette
   registry:
     unavailable: true
-  expected_action: escalate
+  observed_outcome: escalate
+  observed_batch: null
+  observed_gathers: false

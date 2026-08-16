@@ -26,11 +26,28 @@ def test_every_return_is_a_partial_return():
 
 
 def test_true_batch_was_actually_shipped_to_that_customer():
+    """Except where the return is explicitly marked as off-record.
+
+    Cross-docked stock really does arrive without a matching shipment line. Those
+    cases are the reason the candidate list needs a catch-all at all.
+    """
     for r in WORLD.returns:
+        if r.off_record:
+            continue
         sent = {
             line.batch_id for s in WORLD.shipments_to(r.customer_id, r.sku_id) for line in s.lines
         }
         assert r.true_batch_id in sent, f"{r.return_id} claims a batch never sent there"
+
+
+def test_off_record_returns_really_are_off_record():
+    for r in WORLD.returns:
+        if not r.off_record:
+            continue
+        sent = {
+            line.batch_id for s in WORLD.shipments_to(r.customer_id, r.sku_id) for line in s.lines
+        }
+        assert r.true_batch_id not in sent, f"{r.return_id} is marked off-record but was sent"
 
 
 def test_printed_codes_are_valid_even_when_they_describe_the_wrong_batch():
@@ -92,6 +109,9 @@ def test_build_world_is_deterministic():
     assert build_world().model_dump() == build_world().model_dump()
 
 
-@pytest.mark.parametrize("return_id", ["RET-S1", "RET-S2", "RET-S3", "RET-S4", "RET-S5", "RET-S6"])
+@pytest.mark.parametrize(
+    "return_id",
+    ["RET-S1", "RET-S2", "RET-S3", "RET-S4", "RET-S5", "RET-S6", "RET-S7", "RET-S8"],
+)
 def test_all_six_cases_exist(return_id):
     assert any(r.return_id == return_id for r in WORLD.returns)

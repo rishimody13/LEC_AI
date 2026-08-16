@@ -840,3 +840,218 @@ Original four, plus what this audit found:
 
 Changes 5–7 are each under an hour. Change 8 costs nothing and is the difference between a
 design with known limits and a design that quietly overclaims.
+
+---
+
+## 12. Where the cost numbers came from
+
+### 12.1 The honest answer
+
+**I chose them while writing the plan.** They were picked to be plausible for a UK chilled
+food distributor and to make the hero case work. None was derived from a source, and none
+has been checked until now. This section does that check.
+
+The useful distinction is not "right versus wrong" but **derivable versus judged**. A
+derivable number can be computed from something we already know; a judged one cannot.
+
+| Cost | Stated | Basis | Verdict |
+|---|---|---|---|
+| Unit cost | £11.40 | An input we chose, not a harm estimate. Plausible retail price for 800g infant formula | **Definition** — everything else scales off it |
+| Good stock written off | £11.40/unit | Equals unit cost, by definition | **Derived** — correct given the unit cost |
+| Shelf life wasted by conservative expiry | £0.04/unit/day | Amortises £11.40 over 285 days | **Derived, roughly** — a real 18-month shelf life gives £0.021/day, so we are ~2x high |
+| Stock filed in the wrong zone | £2.20 | Extra pick travel — about 5 minutes of labour | **Derived, plausible** |
+| Paid lookup | £0.30 / £0.40 | Prices we set for our own services | **Definition** — not a judgement at all |
+| Human review | £14.00/return | Stated as 20 minutes of analyst time | **Derived, and wrong** — see below |
+| Stock-out | £6.00/unit/day | Not derived from anything | **Judged, and inconsistent** — see below |
+| Unit shipped past best-before | £48.00/unit | Not derived from anything | **Judged** — the only irreducible one |
+
+So of eight figures, four are effectively definitions or sound derivations, two are
+derivations that turn out to be wrong, and **one is a genuine judgement**. That is a much
+smaller problem than "the cost table might be wrong".
+
+### 12.2 Two figures that do not survive the check
+
+**Human review is about 1.6x too high.** £14 for 20 minutes implies £42/hour. A UK inventory
+analyst on £32k with a 1.4x overhead multiplier over 1,750 hours costs £25.60/hour, so 20
+minutes is **£8.53**.
+
+This matters more than it looks. Human review is the price of the escalate action, so
+overstating it biases the agent *away* from escalating — the opposite of the safe direction,
+and it would quietly flatter the agent against the always-escalate baseline in the P6
+comparison. Fix it before running that harness.
+
+**Stock-out and write-off are mutually inconsistent.** At £6/unit/day, being short one unit
+for **1.9 days costs more than destroying it outright** (£11.40). That is only coherent if
+stock-outs carry contractual non-supply penalties. If they do, say so; if not, the figure
+should be closer to lost gross margin — a few pounds per unit for the missed sale, plus a
+small daily penalty. As written, a cost-minimising agent would rather scrap stock than
+backorder it, which is not how a distributor behaves.
+
+### 12.3 How a break-even point is calculated
+
+Expected cost is **linear in every entry of the cost table**. For an action `a`:
+
+```
+EC(a) = Σ over candidates  P(candidate) x harm(a, candidate)  +  price(a)
+```
+
+and each `harm` term is a quantity multiplied by a cost-table entry. So for any single cost
+`c`, the difference between two actions is a straight line in `c`:
+
+```
+EC(a) − EC(b) = α·c + β
+```
+
+- `α` is the difference in **exposure** to that cost — probability times units — between the
+  two actions.
+- `β` collects everything that does not depend on `c`.
+
+Setting the difference to zero gives the break-even directly:
+
+```
+c* = −β / α
+```
+
+No search, no sweep, no grid. One subtraction and one division per pair of actions, exact.
+The result is a sentence a business person can check: *"we buy the lookup as long as an
+expired unit costs more than £X."*
+
+### 12.4 Worked example: the hero case, first decision
+
+At the point where the agent must choose between committing on the label and buying the
+registry lookup, the belief is B-2288 43.5%, B-2290 21.8%, B-2291 31.6%, other 3.2%.
+
+**Committing on the label** records an expiry of March 2027. That is wrong for every
+candidate except B-2291, so the exposure is `0.435 + 0.218 + 0.032 = 0.685`:
+
+```
+EC(commit) = 0.685 × 84 units × c  =  57.54c
+```
+
+**Gathering** costs £0.30, and afterwards the agent commits to B-2288 with a residual 11%
+chance the stock is really B-2290 — which understates shelf life, so it is a write-off, not
+a safety event, and does not depend on `c`:
+
+```
+EC(gather) = £0.30 + 0.110 × 84 × £11.40 = £105.64
+```
+
+Break-even:
+
+```
+c* = 105.64 / 57.54 = £1.84 per expired unit
+```
+
+| | |
+|---|---|
+| Break-even | **£1.84** |
+| Our figure | **£48.00** — 26x above |
+| Expected cost at our figure | commit **£2,762** vs gather **£106** |
+
+**The finding is that this decision does not depend on the cost table at all.** The
+expired-unit figure would have to be wrong by a factor of 26 — down to less than the price
+of the product itself — before the agent would stop buying the lookup. The £48 could be
+£10 or £500 and nothing changes.
+
+That is the whole value of doing this instead of a sweep: a sweep over £30–£60 would have
+reported "stable across the range" without telling us *how much* slack there is. Break-even
+says the slack is 26x, which is a far stronger statement and took one line of arithmetic.
+
+### 12.5 What still needs care
+
+The break-even above is comfortable because the decision is lopsided. The **second** decision
+— commit to the home bin versus segregate under a conservative expiry — is the one that sits
+near a boundary by design, because that is where the mid-confidence band lives. Break-even
+should be computed and reported for that decision too, and it is the one where the £48 will
+actually bite.
+
+Three follow-ups for P4:
+
+1. Recompute human review at £8.53 before running the policy comparison.
+2. Decide whether stock-outs carry contractual penalties, and restate the figure either way.
+3. Emit break-even values in the decision trace alongside expected costs, so every logged
+   decision carries "and this is how wrong the cost table would have to be to change it".
+
+Point 3 is the one that turns this from a one-off analysis into a standing property of the
+system, and it costs almost nothing once the arithmetic is already being done.
+
+
+---
+
+## 13. Postscript: the design was tuned, and how that was caught
+
+Section 11 audited the *recommendation*. This section audits the *implementation*, because
+building it exposed something the earlier analysis had only warned about in the abstract.
+
+### 13.1 What happened
+
+Section 5.3 lists "likelihood specification is where all the judgement hides" as the main
+weakness of a probabilistic design. That is the polite version. The sharper version, which
+only showed up once there was running code, is:
+
+**When you can see what the parameters do to the outputs, you will set them to produce the
+outputs you wanted.** Not deliberately. The sequence is always the same: run it, dislike the
+result, reach for the nearest number, move it until the result improves, then write a
+comment explaining why that value was principled all along.
+
+That happened once here, to `UNRESOLVED_SHARE`, and it produced a decision that won by
+**£0.01** — a tenth of a percent. The comment above it read as reasoning. The ordering it
+concealed was: outcome first, rationale second.
+
+### 13.2 The test that distinguishes the two
+
+Every fix made during the build fell into one of two categories, and the line between them
+turned out to be crisp:
+
+| | Structural fix | Tuning |
+|---|---|---|
+| What changes | What the model *represents* | A number inside a complete representation |
+| Would you defend it with no test cases in front of you? | Yes | No |
+| Discovered by | Reasoning about the domain | Disliking an output |
+
+By that test, the prior double-counting fix, the removal of the code-fragment constraint,
+the human error rate, and the misattribution cost are all structural — each one corrects
+something that was wrong about the world regardless of what it did to the six scenarios.
+`UNRESOLVED_SHARE` was not.
+
+### 13.3 The useful part: un-tuning it broke the demo first
+
+Replacing the tuned constant with a figure derived from its own basis, and re-running
+without adjusting anything, **broke the hero case** — the agent started holding the stock
+instead of identifying it.
+
+That failure was the most informative event in the build. It proved the earlier result had
+depended on the tuned number, and it pointed straight at a structural error that the tuning
+had been papering over: the model treated segregating as if it *resolved* the uncertainty,
+when holding stock only defers the work. Whoever handles it later has the same evidence and
+will be wrong just as often.
+
+Fixing that brought the outcomes back, from a model rather than a constant.
+
+**If you tune a parameter, you lose the ability to be surprised by your own system.** The
+surprise is the diagnostic.
+
+### 13.4 Three things now in the code because of this
+
+1. **Fragile decisions are flagged.** A win by under 5% of the cheapest option is marked in
+   the trace as resting on a chosen parameter rather than on the evidence. Six of ten cases
+   have a fragile first decision, and saying so is more useful than hiding it.
+2. **Recorded outcomes are labelled as recorded.** The scenario file's fields were written
+   after running the code. A test asserting them detects change; it does not check
+   correctness. Both the file and the test now say that.
+3. **Properties are tested instead of outcomes.** `tests/test_generalises.py` varies the
+   return size from 1 to 400 units and asserts invariants — never record an expiry later
+   than the truth, always reach a decision, never let the label win the hero case. It found
+   two surprises immediately, and both were wrong assumptions in the tests rather than bugs
+   in the agent.
+
+### 13.5 What this says about the architecture choice
+
+Section 7 argued for design C (model perceives, plain code decides) partly on the grounds
+that it is auditable. This build is evidence for that, in an uncomfortable way: **the tuning
+was findable precisely because the parameters were named constants with margins attached to
+them.** In a prompt-driven design the same bias would have been expressed as wording, with
+no margin to inspect and nothing to point at.
+
+Auditability does not prevent the bias. It makes it catchable after the fact, which is the
+most any architecture can offer.

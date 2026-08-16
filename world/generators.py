@@ -278,6 +278,45 @@ def _returns(batches: dict[str, Batch]) -> list[ReturnEvent]:
         )
     )
 
+    # S7 - the answer is only in the note. The label is destroyed, the goods never
+    # appeared on a shipment to this customer, and the batch is named in prose.
+    b2296 = batches["B-2296"]
+    out.append(
+        ReturnEvent(
+            return_id="RET-S7",
+            customer_id="CUST-455",
+            sku_id=SKU_ID,
+            quantity=52,
+            arrived=TODAY,
+            true_batch_id="B-2296",
+            off_record=True,
+            printed_code=label_code("B-2296"),
+            printed_best_before=b2296.best_before,
+            condition_note=(
+                "Cross-docked from the Halden depot, no delivery paperwork with it. "
+                "Label soaked through. Inner cases stamped B-2296."
+            ),
+        )
+    )
+
+    # S8 - corrupted rather than unreadable. The label is crisp and complete, but
+    # a blot of ink has filled the hole in one digit, so it reads as a code that
+    # does not exist. The check digit is what gives it away.
+    code, bb = printed("B-2290")
+    out.append(
+        ReturnEvent(
+            return_id="RET-S8",
+            customer_id="CUST-204",
+            sku_id=SKU_ID,
+            quantity=44,
+            arrived=TODAY,
+            true_batch_id="B-2290",
+            printed_code=code,
+            printed_best_before=bb,
+            condition_note="Ink transfer from the pallet label, otherwise sound.",
+        )
+    )
+
     return out
 
 

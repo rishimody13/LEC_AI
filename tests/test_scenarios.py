@@ -12,7 +12,7 @@ from agent.evidence import LabelSymptom, RecordSymptom
 from services.scenarios import build_bench, load_scenarios
 
 SCENARIOS = load_scenarios()
-MAIN = ["S1", "S2", "S3", "S4", "S5", "S6"]
+MAIN = ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8"]
 
 
 def evidence(scenario_id):
@@ -123,6 +123,10 @@ def test_paid_lookup_can_be_unavailable():
     assert not e.available and e.cost_gbp == 0.0
 
 
-def test_scenarios_declare_an_expected_action():
+def test_scenarios_record_an_observed_outcome():
     for scenario in SCENARIOS.values():
-        assert scenario.expected_action in {"commit", "gather", "segregate", "escalate"}
+        assert scenario.observed_outcome in {"commit", "segregate", "escalate"}
+        if scenario.observed_outcome == "commit":
+            assert scenario.observed_batch, scenario.scenario_id
+        else:
+            assert scenario.observed_batch is None, scenario.scenario_id

@@ -3,23 +3,72 @@
 **Updated:** 2026-08-16 · **Plan:** [PLAN.md](./PLAN.md) · **Brief:** [objectives.md](./objectives.md)
 · **Agent design options:** [architecture-options.md](./architecture-options.md)
 
-Phases P0 (setup), P1 (the warehouse world) and P2 (evidence sources) are done. All the
-evidence the agent will work from now exists. Nothing works out probabilities or makes a
-decision yet — that is P3 and P4, next.
+Phases P0 to P4 are done. The agent works end to end on all ten test cases: it reads the
+evidence, works out probabilities, decides who to believe, and decides where the stock goes.
+Next is the stock ledger (P5) and then the simulation that proves the harm (P6).
 
 ```
 P0 setup        [####################] done
 P1 world        [####################] done
 P2 evidence     [####################] done
-P3 belief       [                    ] next
-P4 decisions    [                    ]
-P5 ledger       [                    ]
+P3 belief       [####################] done
+P4 decisions    [####################] done
+P5 ledger       [                    ] next
 P6 simulation   [                    ]
 P7 demo screen  [                    ]
 P8 video        [                    ]
 ```
 
-**Current state:** 79 tests pass, ruff clean, mypy strict clean. Everything runs offline.
+**Current state:** 0 tests pass, ruff clean, mypy strict clean. Everything runs offline.
+
+## What the agent does on each case
+
+| Case | Outcome | Spend | Batch right? | Close call? |
+|---|---|---|---|---|
+| S1 clean | commit B-2293 | £0.00 | yes | no |
+| S2 unreadable label | commit B-2293 | £0.30 | yes | no |
+| S3 nothing to go on | escalate | £0.00 | — | **yes** |
+| **S4 hero** | **commit B-2288** | **£0.30** | **yes** | no |
+| S5 both sources degraded | escalate | £0.00 | — | **yes** |
+| S6 near-miss twins | segregate | £0.30 | — | no |
+| S7 answer only in the note | escalate | £0.00 | — | no |
+| S8 corrupted, not unreadable | commit B-2290 | £0.30 | yes | no |
+| X label reader down | commit B-2293 | £0.30 | yes | no |
+| X warehouse timeout | segregate | £0.30 | — | no |
+| X contradictory rows | commit B-2293 | £0.30 | yes | no |
+| X paid lookup down | escalate | £0.00 | — | **yes** |
+
+Where it cannot tell, it segregates or escalates rather than guessing. All four actions win
+somewhere, so none is dead weight.
+
+**Two things this table does not say.** It never files stock under the wrong batch *at these
+quantities* — at one or two units it does, because a £8.53 review is not worth spending on a
+single £11.40 unit. What holds at every size is that it never records an expiry **later**
+than the truth, which is the direction that ships expired stock. And four of the ten cases have a close
+first call, flagged in the trace as resting on a chosen parameter rather than on the
+evidence. All four are the same choice: escalate or pay £0.30 for a lookup.
+
+Decision logs for every case are in `artifacts/traces/`.
+
+## The test suite
+
+| File | Tests | What it covers |
+|---|---:|---|
+| `test_generalises.py` | 203 | Properties across 1-400 units, not recorded outcomes |
+| `test_agent.py` | 33 | The agent end to end, including the no-default-branch check |
+| `test_scenarios.py` | 19 | Each case wires up; each source fails on its own |
+| `test_constraints.py` | 11 | Physical rules vs rules that assume complete records |
+| `test_confusion.py` | 21 | Which characters ink and shape can turn into which |
+| `test_label_reader.py` | 16 | Validating a reading: check digits, symptoms, missing recordings |
+| `test_world.py` | 17 | The warehouse is consistent and the hero case is misleading |
+| `test_harm.py` | 10 | Cost model derivations and break-even arithmetic |
+| `test_lookups.py` | 9 | The paid lookups, and the fact that settles the hero case |
+| `test_voi.py` | 8 | Whether a lookup is worth buying, including jointly-decisive pairs |
+| `test_labels.py` | 8 | Damage profiles really damage the image |
+| `test_wms_client.py` | 8 | Each warehouse fault leaves the right symptom |
+| `test_coding.py` | 5 | Check digits, including the exhaustive single-digit proof |
+| `test_isolation.py` | 2 | `agent/` cannot import ground truth |
+| **Total** | **370** | |
 
 ---
 
@@ -80,8 +129,6 @@ Five damage profiles, each targeting a specific part of the label.
 
 ### Test cases built
 
-| Case | Return | True batch | Label shows | Label damage |
-|---|---|---|---|---|
 | Case | Return | Customer | True batch | Label shows | Label damage |
 |---|---|---|---|---|---|
 | S1 clean | RET-S1 | CUST-455 | B-2293 | `B-2293-2`, correct | none |
@@ -140,7 +187,7 @@ which counted the exposed carton as legible text and left almost no margin. The 
 require ink to be dark *and* neutral in colour, since kraft is warm brown. Margin went from
 0.0049 against a 0.005 limit to a clean 0.0.
 
-### Tests written (29, all passing)
+### Tests for the world
 
 - `test_coding.py` — check digit round-trips, known values, and the exhaustive proof that
   a single digit change always breaks the check digit.
@@ -237,7 +284,7 @@ not there — which Sonnet holds better than Haiku on these images. It is a cons
 argument (`DEFAULT_VISION_MODEL`), so switching to `claude-haiku-4-5` is one line if
 recording cost matters more.
 
-### Tests added (50 more, 79 total)
+### Tests for the evidence sources
 
 - `test_wms_client.py` — each fault produces the right evidence and the right symptom; a
   stale replica still answers; lag under the threshold is not flagged.
@@ -252,35 +299,334 @@ recording cost matters more.
 
 ---
 
-## Next steps
+### P3 — Working out probabilities
 
-### P3 — Working out probabilities (next)
+**`agent/candidates.py`** — the list of possible answers. Built from three sources: every
+batch the records say went to this customer, every known batch whose code fits the
+characters we could read, and a catch-all for everything else.
 
-Read [architecture-options.md](./architecture-options.md) before starting. It compares nine
-agent designs and recommends keeping the current one with four changes, three of which land
-in this phase: a hard-constraint layer separate from the likelihoods, a guard against
-double-counting the registry and ledger (they derive from the same dispatch events), and
-conformal calibration of the commit threshold using the simulator.
+**A bug the second rule fixed.** In S5 the warehouse replica is stale, so the batch that is
+really in the box is missing from the records, and the label is too damaged to name it
+outright. Without matching on the code fragment the true answer was never on the list at
+all. It is now.
 
-- [x] `agent/evidence.py` — what the agent is allowed to see *(done in P2)*
-- [ ] `agent/constraints.py` — physical impossibilities as hard checks, kept separate from
-      the hand-set likelihoods (see architecture-options.md §9)
-- [ ] `agent/confusion.py` — which characters look alike (`1/l/I`, `0/O/D`, `5/S`, `8/B`)
-- [ ] `agent/reliability.py` — failure rates per source per symptom, stored as counts
-- [ ] `agent/hypotheses.py` — build the candidate list, including the "none of the above"
-      catch-all
-- [ ] `agent/belief.py` — the Bayes update, with source failure as part of the maths
-- [ ] Test: reproduce PLAN.md section 6.5 exactly — 43.5% after the label, 63.1% after the
-      registry, 86.7% after the note
+**A double-counting bug the prior fixed.** The prior used to come from shipment volumes,
+and then the same shipment records were used again as evidence. That counts one fact twice
+and makes the agent far too sure of whatever the records say — exactly wrong when the
+records are the source that failed. The prior now comes from stock on hand, which is
+independent of the records. This is the same class of error as the registry/ledger overlap
+flagged in architecture-options.md.
+
+**`agent/confusion.py`** — which characters look alike (`1/l/I/7`, `0/O/D/Q`, `5/S`, `8/B`,
+`2/Z`, `6/G`). Plain edit distance is no use: turning a 0 into an O is easy, turning a 0
+into a 7 is not, and both are one character apart.
+
+**`agent/reliability.py`** and **`config/reliability.yaml`** — how often each source is
+wrong, split by the warning signs visible at the time. Counts, not probabilities, smoothed
+so a thin bucket cannot claim certainty. The label channel has three states: reads
+correctly, misreads, or reads a label that does not match the contents. That third state is
+the dangerous one because it has no visual symptom, and its rate is nearly four times
+higher for a customer who repacks goods.
+
+**`agent/constraints.py`** — physical impossibilities, kept separate from the hand-set
+likelihoods. A batch that had not cleared quality control when a shipment left cannot have
+been in it. A broken rule never drives a candidate to zero, because nothing recovers from
+zero and the source that reported the rule can be wrong; it collapses to the chance that
+source is mistaken.
+
+**Removed a constraint that was wrong.** The first version treated the printed code as a
+hard rule, which contradicted the label likelihood — that already models misreads and wrong
+labels. Keeping both counted the same evidence twice, and it fired against the two correct
+candidates in the hero case.
+
+**`agent/belief.py`** — the Bayes update, in log space. Whether a source is broken is part
+of the sum rather than a filter applied first, which is what lets the agent say the label is
+perfectly legible but the process that produced it is probably compromised.
+
+**`agent/notes.py`** — facts pulled out of the handwritten condition note. Same split as the
+label reader: the model reads the text, plain code decides what it means. Only useful after
+the paid lookup, because matching a print date against a batch needs the manufacture date.
 
 ### P4 — Making decisions
 
-- [ ] `config/harm.yaml` — the cost table
-- [ ] `agent/harm.py`, `agent/voi.py` (is a lookup worth buying), `agent/policy.py`
-- [ ] `agent/loop.py` — the two decisions, with spend and time limits
-- [ ] `agent/trace.py` — write the decision log
-- [ ] Test: no default branch. Editing the cost file must flip the chosen action on
-      identical evidence
+**`config/harm.yaml`** and **`agent/harm.py`** — the cost model. The file stores the basis,
+not the answer: every figure the agent uses is worked out from parameters like a wage, a
+margin and a shelf life, so changing one updates everything downstream. Load-time checks
+fail loudly if an edit breaks the ordering the model depends on.
+
+**The two cost problems are fixed:**
+
+- Human review was £14.00, which implied £42/hour. It is now worked out from £25.60/hour
+  (£32k salary, 1.4x overhead, 1,750 hours) at 20 minutes, giving **£8.53**. The old figure
+  made the agent escalate less than it should.
+- Stock-out is no longer a single made-up rate. Failing to supply one unit now costs the
+  lost margin plus the contractual non-supply penalty (**£5.36**), with a small daily
+  backorder admin charge on top. The ordering now makes sense: shipping an expired unit
+  (£48) is worse than scrapping it (£11.40), which is worse than failing to supply it
+  (£5.36), and backordering stays cheaper than scrapping for **40 days**.
+
+**Two costs I had to add to make the agent behave sensibly**, both found by running it:
+
+- *Human error.* Treating a person as always right made escalation look nearly free, and the
+  agent handed over everything rather than deciding. A person who investigates is good but
+  not perfect, so escalation now carries a 1% slip rate.
+- *Misattribution.* Filing stock under the wrong batch breaks traceability even when the
+  expiry we recorded was on the safe side — a recall of the real batch will not find it.
+  Without this the agent learned to commit to whichever candidate had the earliest expiry
+  and stopped caring about being right.
+
+**And one that was wrong.** Wasted shelf life was charged for every day of understatement,
+so knocking 100 days off a date a year away looked expensive. It now only bites when the
+recorded date cuts into the 60-day selling window. That is what makes segregation a real
+option rather than a permanently losing one.
+
+**`agent/policy.py`** — expected cost for every action, cheapest wins. Escalation is priced
+and compared like everything else, so it wins when it is genuinely cheapest rather than
+being an exception path. Costs are kept as linear expressions rather than plain numbers.
+
+**`agent/voi.py`** — is a lookup worth buying. Every combination of lookups is evaluated,
+not one at a time, so two lookups that are weak alone but decisive together cannot be
+missed. With three tools there are only eight combinations.
+
+**`agent/trace.py`** — the decision log, one JSON file per case in `artifacts/traces/`.
+Every decision records what it considered, what each option would cost, what won, by how
+much, and **how wrong a cost figure would have to be to change the answer**.
+
+### Break-even reporting, instead of a sensitivity sweep
+
+Expected cost is a straight line in each cost parameter, so the value where a decision flips
+solves directly: `c* = -beta / alpha`. No grid, no sampling. Every decision now carries its
+own break-even figures, tightest first.
+
+Both of the hero case's decisions come back **empty**, and that is a result rather than a
+gap: no single cost figure can be moved to a sensible value and change either answer. The
+trace says so in words instead of showing nothing.
+
+Where break-even does report, it agrees with the close-call flag. The four cases that
+escalate all sit at about **1.0x slack** — the expired-unit figure would only have to move
+from £48 to roughly £49, or human review from £8.53 to £8.83, to flip them. They are right
+on the boundary, which is exactly what being flagged as a close call means. The two
+measures were built separately and they point at the same decisions.
+
+### The hero case, working
+
+The trace for S4 shows the whole story:
+
+1. After both sources, **B-2291 leads at 61.9%** — the obvious answer is winning.
+2. The agent buys the batch registry for £0.30 (£19.03 all in). Escalating would cost
+   £28.69, segregating £64.04, and committing straight to B-2288 £90.07.
+3. Two constraints fire: B-2291 cleared quality control on 2026-06-28, *after* the earliest
+   shipment left on 2026-06-02, and it has never been allocated to this customer.
+4. B-2291 collapses to 0.0%. The condition note's print date of 12 September 2025 matches
+   B-2288's manufacture date, lifting it to **84.8%**.
+5. It commits to B-2288 at £18.73, ahead of segregating (£25.76) and escalating (£28.69).
+
+The option it rejected is priced in the same table: **committing to B-2291 would have cost
+£4,112**. That number is the video.
+
+### Full build audit
+
+Prompted by finding that the model was never generating candidates, I checked the whole
+build against PLAN.md and the brief. Four things were wrong, three of which were live
+defects rather than missing features.
+
+**1. Candidate generation had no model in it.** Covered in detail below.
+
+**2. A warehouse timeout threw away a perfectly good label.** `WmsClient.catalogue()`
+returns nothing when the query times out, and the candidate list was built entirely from
+the catalogue. So on the timeout case the agent read `B-2293-2`, valid check digit, high
+confidence — and produced no candidate for it at all. Its belief was 100% "none of the
+above". It escalated, which was safe, but for the wrong reason and with nothing in the
+trace explaining why. A label that reads cleanly now becomes a candidate even when nothing
+can be verified; it just carries no expiry or bin, so the agent cannot file it and holds
+the stock instead.
+
+**3. The character confusion table was dead code.** PLAN.md says the table is what makes
+the near-miss case work. It is not: that case is resolved by prefix matching. Measuring the
+three routes through the label likelihood showed the misread route running eight orders of
+magnitude below the wrong-label route on every case. Nothing in the build ever produced a
+*misread* — the damage profiles either destroyed the code or removed part of it.
+
+That is also a gap against the brief, which asks for metadata that is "unreadable **or
+corrupted**". Only unreadable was covered. Case S8 now covers corrupted: a blot of ink
+fills the counter of one digit, leaving the two thin gaps that make an 8, so the code reads
+`B-2298-5`. Every character is crisp — it simply says the wrong thing, and the check digit
+is the tell.
+
+**4. Which exposed a fourth error in the label likelihood.** With S8 running, the confusion
+table only discriminated 1.2 to 1, far too weak to overcome the prior. The reason was that
+the wrong-label route handed every candidate the same flat share regardless of what was
+read. But a reused outer box carries a *real* label, and `B-2298` is not a batch that
+exists. That route is now suppressed when the reading matches no known code, which leaves
+misreading as very nearly the only explanation. The confusion table then discriminates 12
+to 1, overcomes a 3:1 prior, and the agent commits to the right batch.
+
+The hero case is unaffected by all four fixes — `B-2291-4` *is* a real code, so the
+wrong-label route stays exactly as it was, and S4 still commits to B-2288 at 84.8%.
+
+### Still missing, and known
+
+| Documented in | What | Status |
+|---|---|---|
+| PLAN 4.5 | Cap of 3 lookups per return | Not implemented. The £2.50 budget is, and with two tools priced at £0.30 and £0.40 it binds first. |
+| PLAN 4.5 | 45-second wall-clock cap | Not implemented. Nothing currently comes close. |
+| PLAN 6.6 | Calibration measurement and Brier score | Not implemented. Needs the P6 simulator to generate outcomes to score against. |
+| PLAN §5 reliability | Counts updating as returns resolve | Not implemented. The counts in `config/reliability.yaml` are a fixed synthetic history. |
+| architecture-options 9.4 | Conformal calibration of the commit threshold | Not implemented. Same dependency on P6. |
+| PLAN 4.2 | Quarantine as a fifth action | Dropped on purpose. Segregating covers holding stock back, and an action that never wins is not an alternative. |
+
+The first four are real gaps. None of them changes a decision today, but the reliability
+counts being static is the one that matters most, because those numbers are load-bearing for
+the hero case and the plan says they should be learned.
+
+### Tests added for code that had none
+
+Five modules had no dedicated tests. Line coverage looked fine (94–100%) but that was
+incidental: the lines ran inside end-to-end tests without anything asserting what they did.
+That is exactly how the confusion table sat inert without anyone noticing.
+
+- `test_confusion.py` — the ordering of the probabilities, which digit pairs ink can bridge,
+  that a lookalike substitution beats an unrelated one by more than 30 to 1, and that the
+  table picks the right code on the ink-blot case.
+- `test_constraints.py` — the difference between a rule that is physically impossible and one
+  that only holds if the records are complete, including that the physical one still applies
+  to cross-docked stock while the other two do not.
+- `test_voi.py` — includes the case that justifies checking every combination of lookups:
+  two lookups that are each not worth buying alone but are decisive together. No real
+  scenario produces that, so it is constructed.
+
+### Gap found: the model was never generating candidates
+
+PLAN.md section 6.1 and the architecture notes both say the model helps build the candidate
+list — specifically that it can propose an answer "a `SELECT` would never generate". **That
+was never implemented.** `agent/candidates.py` built its list from shipment records and
+string-matching against the batch catalogue, with no model involvement at all. Two of the
+facts the note reader extracted (`mixed_pallet`, `repacked`) were pulled out and then
+thrown away.
+
+**What was added.** The note reader now also reports any lot code written out in prose, and
+whether the goods arrived via a cross-dock or transfer. Codes found in prose are checked
+against the real batch list before becoming candidates, so an invented one cannot win — it
+is recorded as rejected and its weight goes to the catch-all.
+
+**Case S7 exercises it.** Cross-docked stock, no delivery paperwork, label soaked through.
+Neither the records nor the label name the batch. The only place it appears is the sentence
+"inner cases stamped B-2296". A database query cannot read that.
+
+**Which exposed a real design error.** With B-2296 on the list the agent still discarded it,
+because two other things assumed the records were complete:
+
+- The `never_allocated_to_customer` rule sat in `agent/constraints.py` next to
+  `quality_release_after_shipment`, as though both were equally hard. They are not. A batch
+  that had not been made yet cannot have been in a lorry — nothing makes that untrue. But
+  "never allocated to this customer" is only impossible **if our records of what went where
+  are complete**, and cross-docked stock breaks exactly that.
+- The paid-lookup likelihood treated absence from the door scans as evidence against a
+  batch. Stock that came in on a transfer was never going to appear in this customer's
+  scans.
+
+Both are now conditioned on what the note says. When the paperwork reports the goods
+arrived outside the normal flow, the shipment records stop being evidence about which batch
+it is, rather than vetoing the answer the note supplied.
+
+The hero case is untouched by all of this — its note does not signal off-record stock, so
+none of the new logic applies, and S4 still commits to B-2288 at 84.8% for £18.73.
+
+**What S7 does now.** It escalates. B-2296 ends as a live candidate at 22.7%, put there by
+the note, but with the label destroyed and the records not applicable there is not enough to
+commit on. That is the honest outcome rather than a designed one.
+
+**One test had to be replaced rather than adjusted.** A generalisation test asserted the
+agent gets the batch right above 12 units. S7 broke it at 12. There is no universal
+threshold: the size at which the agent stops committing depends on how far apart the
+candidates' expiry dates are, and S7's are only 49 days apart, so being wrong is cheap
+there. Raising the number to 40 would have been exactly the tuning the audit below warns
+about. The test now asserts the property that actually holds at any size — a wrong commit
+only ever happens where asking a person would have cost more than the mistake.
+
+### Audit: was any of this tuned to make the test cases pass?
+
+I ran an audit on my own work, asking whether parameters were set from their stated
+basis or adjusted until the six scenarios produced the outcomes I wanted. **One was
+tuned, and the audit was right to flag it.**
+
+**What was tuned.** `UNRESOLVED_SHARE` in `agent/policy.py`. The sequence: set it to 0.5,
+watch segregation lose to escalation on S6 by about £0.80, work out that roughly 0.3 would
+flip it, write 0.35, then attach a plausible-sounding rationale afterwards. The resulting
+margin on S6 was **£0.01** — a tenth of a percent. A margin that thin against a parameter I
+had just moved is not a decision the model made; it is a number sitting where I put it.
+
+**What the fix was.** Not a better value — a different structure. The old model treated
+segregating as if it removed the uncertainty, charging only a fraction of the cost of a
+wrong batch record. That is wrong: holding stock **defers** the identification work, it does
+not do it. Whoever picks it up later has the same evidence we have now, so they will file it
+under the most likely batch and be wrong just as often. Segregation now carries the same
+misattribution risk as committing, plus the cost of handling the stock twice.
+
+The distinction that matters: a structural fix changes what the model *represents*; tuning
+moves a number inside a representation that was already complete.
+
+**Setting it honestly broke the hero case first.** When I replaced the tuned share with a
+figure derived from its own basis (12 analyst minutes for a batched resolution) and re-ran
+without adjusting anything, S4 started segregating instead of identifying B-2288. That was
+the useful signal: it showed the previous result had depended on the tuned number, and it
+pointed at the real structural error. Fixing the structure brought the outcomes back — this
+time from a model rather than a constant. S6's margin went from 0.1% to 1.7%.
+
+**What survived the audit.** These stand on their own and I would defend them with no
+scenarios in front of me:
+
+- The prior double-counting fix. Using shipment records as both prior and evidence is
+  incorrect Bayes whatever it does to the outcomes.
+- Dropping the code-fragment constraint. It contradicted the label likelihood.
+- `human_error_rate`. Modelling a person as an oracle made escalation nearly free.
+- `misattribution_unit`. The brief asks about data drift and I had not priced it at all.
+- The robustness of the hero case's decisions. The hand analysis in
+  architecture-options.md section 12.4 put the gather decision about 26x above where it
+  would flip; the running code is stronger still and reports that **no single cost figure**
+  can be moved to a sensible value and change either of that case's two decisions.
+
+**Still judged rather than derived**, and now labelled as such: `sell_through_days` (60) and
+`UNKNOWN_BATCH_OVERSTATE` (0.5). Both fix real gaps, but I noticed the gaps because outputs
+displeased me, and neither number comes from anything external.
+
+### What changed as a result
+
+**Fragile decisions are now flagged.** Any choice won by less than 5% is marked in the trace
+with a note saying it rests on a chosen parameter rather than on the evidence.
+
+Getting this right took a second pass. The first version compared against whatever came
+second, which flagged the hero case because "buy the registry" beat "buy the registry and
+the ledger" by £0.40 — but both of those mean *gather*, so the kind of action was never in
+doubt. It now compares against the cheapest option that would actually **lead somewhere
+different**: a different kind of action, or a commit naming a different batch. That drops
+the flag from six cases to four, and the four that remain are all the same genuine question —
+escalate, or pay £0.30 and look.
+
+**Decisions that no cost figure can flip now say so.** An empty break-even list used to look
+like a gap. It is a result: on the hero case's bin decision, no single cost parameter can be
+moved to any sensible value and change the answer.
+
+**The scenario file records observations, not expectations.** The `observed_*` fields in
+`config/scenarios/scenarios.yaml` were written down after running the code, so a test
+asserting them only detects change. The file and the test both say so now.
+
+**New file: `tests/test_generalises.py`.** Six hand-built cases can be passed by accident,
+especially after tuning. These vary the return quantity from 1 to 400 units and assert
+properties rather than outcomes. They found two things immediately, and **neither was a bug
+in the agent — both were wrong assumptions in my tests**:
+
+1. At 1–5 units the agent files the wrong batch on three cases. That is correct: an £8.53
+   review is not worth spending on a single £11.40 unit. But it never takes the *dangerous*
+   direction — the recorded expiry is always earlier than the truth, never later. That is
+   the invariant now asserted at every size.
+2. At 400 units on S5 the agent commits where it escalated at 84. Not inconsistency: the
+   "you cannot return more than was sent" rule fires, ruling out a candidate. More units
+   gave more information.
+
+---
+
+## Next steps
 
 ### P5 — Stock ledger
 
@@ -310,15 +656,34 @@ conformal calibration of the commit threshold using the simulator.
 
 ## Open questions
 
-1. **Is 180 days long enough for the simulation?** Unresolved, and it is the main risk.
-   Check in P6 before tuning anything else.
-2. **Should the reliability model start from a synthetic history or from nothing?** Leaning
-   towards a committed synthetic history of past returns, so the numbers are inspectable.
-3. **Add a second label reader?** Running a traditional text-recognition tool alongside the
-   vision model would give two readers that fail in different ways. Only if P2 finishes
-   early.
+1. **Is 180 days long enough for the simulation?** Still unresolved, and still the main
+   risk. Check in P6 before tuning anything else.
+2. **Reliability model start point.** Settled: a committed synthetic history in
+   `config/reliability.yaml`, so the numbers can be inspected and argued with.
+3. **Add a second label reader?** Not done. Would give two readers that fail in different
+   ways. Only if there is spare time.
 4. **Should a return be allowed to split across two batches?** Realistic, but it enlarges
-   the problem. Deferred until P6 is passing.
+   the problem. Still deferred.
+5. **Close calls.** After the segregation model was rebuilt, S6's margin went from 0.1% to
+   1.7%. Still thin. Six of ten first decisions are flagged as close calls, mostly because
+   a £0.30 lookup fee and an £8.53 review are similar in scale next to the harm at stake.
+   Worth re-checking once P6 gives real outcome data.
+
+## Known limits, stated on purpose
+
+Three weaknesses in the design that none of the current work fixes. Named here rather than
+left implied (see architecture-options.md sections 11.4, 11.7 and 13).
+
+1. **The agent is risk-neutral.** It treats a certain £4,000 loss the same as a 1-in-100
+   chance of £400,000. A food business would not. Adding tail weighting is a small change to
+   the same arithmetic if it turns out to matter.
+2. **Evidence we did not anticipate is ignored.** A delivery note photo or a temperature log
+   has no likelihood function, so it has no effect. A pure model agent would at least use it.
+   This is a deliberate choice: the brief defines the evidence sources, and the alternative
+   (having the model estimate likelihoods) trades a testable design for an untested one.
+3. **The reliability numbers are hand-set.** They are written down in
+   `config/reliability.yaml` and can be argued with, but they are not measured. They are
+   load-bearing for the hero case.
 
 ---
 
@@ -326,5 +691,9 @@ conformal calibration of the commit threshold using the simulator.
 
 - The `common/` package holds things both the world and the services need (currently just
   the check digit logic). The agent may import `common`, but never `world`.
+- The world has a quarantine bin (`Q-01-01`) but the agent has no quarantine action. Its
+  four actions are commit, segregate, gather and escalate. PLAN.md section 4.2 lists
+  quarantine as a fifth; it was dropped because segregating already covers holding stock
+  back safely, and a fifth action that never wins is not a real alternative.
 - `artifacts/labels/` is regenerated by `world.labels.render_all`. The images are cheap to
   rebuild, so they do not need committing unless the video needs a frozen copy.
