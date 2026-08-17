@@ -4,10 +4,12 @@
 · **Agent design options:** [architecture-options.md](./architecture-options.md)
 · **Where the model is used:** [llm-integration.md](./llm-integration.md)
 
-Phases P0 to P5 are done. The agent works end to end on all twelve test cases: it reads the
+Phases P0 to P6 are done. The agent works end to end on all twelve test cases: it reads the
 evidence, works out probabilities, decides who to believe, decides where the stock goes, and
 writes that decision to an append-only stock ledger that can be traced back and undone.
-Next is the simulation that proves the harm (P6).
+The harm is now measured rather than asserted: over 600 seeded runs of eighteen
+months each, the agent ships **22% fewer expired units** than trusting the label, and the
+confidence interval excludes zero. Next is the demo screen (P7).
 
 ```
 P0 setup        [####################] done
@@ -16,12 +18,12 @@ P2 evidence     [####################] done
 P3 belief       [####################] done
 P4 decisions    [####################] done
 P5 ledger       [####################] done
-P6 simulation   [                    ] next
-P7 demo screen  [                    ]
+P6 simulation   [####################] done
+P7 demo screen  [                    ] next
 P8 video        [                    ]
 ```
 
-**Current state:** 534 tests pass, ruff clean, mypy strict clean. Everything runs offline.
+**Current state:** 545 tests pass, ruff clean, mypy strict clean. Everything runs offline.
 
 Building the ledger found four real faults, all of them in the direction that ships expired
 stock. They are written up under "what the ledger found" below, each with a named regression
@@ -71,6 +73,7 @@ decision produced, so the trace and the stock record are the same document.
 | File | Tests | What it covers |
 |---|---:|---|
 | `test_generalises.py` | 203 | Properties across 1-400 units on the hand-written cases |
+| `test_harm_is_real.py` | 11 | The R8 proof: policies compared over 18 months, with intervals |
 | `test_ledger.py` | 109 | The stock record: append-only, conserved, reversible, and its drift |
 | `test_sweep.py` | 49 | The agent against generated cases nobody wrote |
 | `test_agent.py` | 34 | The agent end to end, including the no-default-branch check |
@@ -86,7 +89,7 @@ decision produced, so the trace and the stock record are the same document.
 | `test_wms_client.py` | 8 | Each warehouse fault leaves the right symptom |
 | `test_coding.py` | 5 | Check digits, including the exhaustive single-digit proof |
 | `test_isolation.py` | 4 | Neither `agent/` nor `ledger/` can import ground truth |
-| **Total** | **534** | |
+| **Total** | **545** | |
 
 ---
 
@@ -894,25 +897,190 @@ Two new gates also run on every build: held stock is never dated later than the 
 being right, so a miscalibrated world is no excuse), and dangerous drift must stay under 1% of
 wasteful drift.
 
+### Is the agent operating at the optimum?
+
+It was not. Asked whether the costs looked high, I measured the agent's calibration against
+2,000 generated cases with known answers, and it was **overconfident by a factor of two**: it
+said it was wrong 1.7% of the time and was actually wrong 3.3%.
+
+| stated confidence | commits | said | actually right | gap |
+|---|---:|---:|---:|---:|
+| under 0.90 | 46 | 0.818 | 0.783 | −0.035 |
+| 0.90 – 0.99 | 224 | 0.961 | 0.911 | −0.050 |
+| 0.99 – 0.999 | 314 | 0.996 | 0.978 | −0.018 |
+| above 0.999 | 532 | 1.000 | 1.000 | 0.000 |
+
+Brier score 0.030. The revealing cut is not that table but this one — **the more evidence the
+agent gathers, the worse its calibration gets**:
+
+| evidence updates applied | commits | said | actually right | gap |
+|---|---:|---:|---:|---:|
+| 2 | 582 | 0.9897 | 0.9777 | −0.012 |
+| 4 | 426 | 0.9728 | 0.9554 | −0.017 |
+| 5 | 108 | 0.9905 | 0.9537 | −0.037 |
+
+That is the signature of treating correlated sources as independent. Multiplying likelihoods
+assumes each source is independent once you know the batch, and they are not: **a reused
+outer box carries a genuine label of a batch that genuinely went to that customer**, so the
+records and the registry agree with the label precisely when the label is misleading. Three
+confirmations, one fact.
+
+**The correction** is to weight each log-likelihood by less than one (`EVIDENCE_WEIGHT` in
+`agent/belief.py`). Measured on realised cost, not chosen:
+
+| weight | £ per return (4,000 fresh seeds) | dangerous cases | overstated unit-days |
+|---|---:|---:|---:|
+| 1.00 (independent) | 77.60 ± 29.71 | 9 / 4000 | 701,299 |
+| 0.97 | 55.49 ± 15.65 | 5 / 4000 | 241,587 |
+| **0.95** | **56.11 ± 15.65** | **5 / 4000** | **241,587** |
+| 0.92 | 56.25 ± 15.42 | 4 / 4000 | 238,675 |
+| 0.90 | 56.23 ± 15.26 | 3 / 4000 | 220,251 |
+
+Everything from 0.97 to 0.90 is **statistically indistinguishable** — the costs differ by
+under £1 against a 95% interval of about £15. All of them beat 1.0. 0.95 is the smallest
+correction the evidence supports, so it is the one taken; the honest claim is the band, not
+the number.
+
+Two cautions, stated rather than buried:
+
+- **The cost intervals overlap** even against 1.0 (£77.60 ± 29.71 versus £56.11 ± 15.65). The
+  per-seed cost is heavily skewed — most cases cost nothing, a few cost a great deal — so the
+  firmer evidence is the safety measure, where unit-days on the dangerous side fall roughly
+  threefold and the direction is consistent across every seed range tried.
+- **The weight was fitted on generated worlds.** The *direction* is structural — the sources
+  really are correlated — but the exact value depends on the fault mix. It was chosen on one
+  set of seeds and checked twice on seed ranges that played no part in choosing it.
+
+**Constraints are exempt**, at full weight. The correction exists because corroborating
+sources share information; a constraint does not corroborate anything, it rules a candidate
+out, and it already carries its own error rate in `survives_with`. Discounting it again would
+charge the same doubt twice and blunt the one signal meant to be sharp.
+
+**S4 sits within 2% of a boundary because of this.** At weight 0.95 the hero case commits to
+B-2288 after paying for the lookup; at 0.90 it escalates instead, by a margin of £0.30. The
+post-lookup belief barely moves (0.846 versus 0.826) — what changes is that committing costs
+£24.95 against escalating at £28.69, and those cross right about there. That is a real
+property of the case, not a tuning artefact, and the trace flags it as a close call. Choosing
+0.95 does keep S4 deciding rather than deferring, and since the data cannot separate 0.97
+from 0.90 that tie-break is disclosed here rather than presented as a measurement.
+
+**A bug this exposed**: writing the weight as a default argument (`weight: float = EVIDENCE_WEIGHT`)
+binds it once when the function is defined, so every experiment that set it afterwards was
+silently ignored. It now reads the module value inside the body.
+
+---
+
+### P6 — Proving the harm
+
+**New files:** `downstream/demand.py`, `downstream/picking.py`, `downstream/truth.py`,
+`downstream/simulate.py`, `harness/policies.py`, `harness/counterfactual.py`,
+`harness/outcome.py`, `tests/test_harm_is_real.py`, `artifacts/harm.json`.
+
+Eighteen months of a warehouse, day by day: deliveries land, returns arrive and get decided
+on, orders ship first-expired-first-out, stock past its recorded date is written off, and
+reordering tops the shelf back up. Six policies run through identical months.
+
+The mechanism the whole argument rests on is in the picker. It ranks stock by the expiry
+**the record says**; what physically leaves is whatever is actually in that location. Stock
+recorded as lasting longer than it does sinks to the back of the queue, waits, and ships
+after it has really gone off. Nothing malfunctions at any point.
+
+`downstream/truth.py` holds what is really at each position, deliberately as a separate
+object the ledger cannot see. If the ledger knew, every figure below would be right by
+construction and prove nothing.
+
+#### Results — 600 seeds, 540 days each, paired
+
+| policy | expired units | stock-out | escalations | £ per run |
+|---|---:|---:|---:|---:|
+| **agent** | **293.3** | 8.0 | 39.0 | **153,852** |
+| trust the label | 374.3 | 6.5 | 35.1 | 156,932 |
+| trust the records | 1,756.8 | 5.1 | 7.5 | 222,352 |
+| always escalate | 782.9 | 8.6 | 104.7 | 177,913 |
+| always segregate | 128.5 | 15.9 | 0.0 | 213,044 |
+| oracle (knows the answer) | 0.0 | 5.3 | 0.0 | 142,560 |
+
+Agent against each alternative, paired seed by seed, 95% bootstrap intervals. Negative means
+the agent is better:
+
+| against | expired units | total £ |
+|---|---|---|
+| trust the label | **−81.0 [−121.4, −42.0]** | **−3,080 [−4,745, −1,442]** |
+| trust the records | −1,463.5 [−1,672.1, −1,262.8] | −68,501 [−75,945, −61,304] |
+| always escalate | −489.6 [−532.0, −448.1] | −24,061 [−26,083, −22,155] |
+| always segregate | +164.8 [+127.5, +202.8] | −59,193 [−62,811, −55,492] |
+| oracle | +293.3 [+260.3, +328.6] | +11,292 [+9,713, +13,004] |
+
+**The headline: 22% fewer expired units than trusting the label, and cheaper, both intervals
+excluding zero.** The agent beats every runnable policy on both counts. It does not beat the
+oracle, and should not — that is the floor.
+
+Two results worth reading carefully:
+
+- **Escalating everything is not safe.** It ships 783 expired units against the agent's 293,
+  because a 1% human error rate applied to *every* return beats a larger rate applied only to
+  the ones the agent could not resolve. Had the simulation treated review as a free correct
+  answer, this policy would have been unbeatable and the whole comparison rigged.
+- **Segregating everything is safe and useless.** It ships the fewest expired units of any
+  runnable policy and costs £59,193 more, because held stock is never on a pick face when it
+  is needed. Quoting the expiry number alone would make it look like the winner, which is why
+  the cost column is not optional.
+
+#### The 180-day assumption was wrong
+
+This was flagged in the plan as the biggest open risk, and it was real. Expired units shipped
+by "trust the label", same eight seeds, by horizon:
+
+| horizon | 180d | 270d | 365d | 540d | 730d |
+|---|---:|---:|---:|---:|---:|
+| total expired units | 644 | 3,129 | 1,772 | 4,730 | 3,729 |
+
+At 180 days **six of the eight seeds report zero**. The horizon was truncating the harm, not
+measuring it, and a six-month run would have concluded there was no difference between
+policies worth having. The reason is the mechanism: stock filed under a long-dated batch
+joins the back of a queue about eighty days deep that is constantly refreshed by deliveries
+with earlier dates, so a decision in month one is not picked until months six to twelve.
+Being slow is the entire point of the failure; the measurement has to outlast it. The horizon
+is now 540 days, and `test_the_harm_needs_a_long_horizon_to_appear` keeps it that way.
+
+The per-seed figures are not monotonic in the horizon because a longer run changes the whole
+replenishment trajectory — it is not a nested subset of a shorter one. The aggregate is what
+carries the point.
+
+#### Three bugs the simulation found in itself
+
+1. **More units coming back than going out.** The first version returned 30,394 units against
+   14,368 shipped, so the shelf never drained far enough to reach anything misfiled and every
+   policy scored zero harm — for a reason that had nothing to do with its decisions.
+2. **Nobody ever resolved an escalation.** Escalated stock sat in quarantine for eighteen
+   months and was charged as a total loss, which made every policy that hands anything to a
+   person look ruinous. A person now reviews it after three days and is right 99% of the time,
+   which is exactly what the agent's own cost model assumes when it decides to escalate.
+3. **The comparison was not actually paired.** Human review and replenishment drew from the
+   same random stream as the return generator, so a policy that escalated more consumed
+   different randomness and got *different returns*. The results still looked plausible. There
+   are now two independent streams and a test that every policy saw identical returns.
+
 ---
 
 ## Next steps
 
-### P6 — Proving the harm (do not skip)
+### P6 — what is left
 
-- [ ] Demand generator, first-expired-first-out picker, reordering, forecasting
-- [ ] 180-day run, all policies, 200 seeds, confidence intervals
-- [ ] `test_harm_is_real.py`
-- [ ] **Check the 180-day horizon is long enough.** If misfiled stock never gets picked
-      inside the window, the headline harm is zero and the whole proof collapses. This is
-      the biggest open risk in the plan
-- [ ] **The picker must skip stock with no expiry date, and must not pick from the hold or
-      review bins.** This is not a detail. The cost model now charges nothing for the expiry
-      risk of undated held stock, on the grounds that first-expired-first-out cannot rank
-      what it cannot date. If the picker in P6 ships it anyway, that assumption is wrong and
-      the segregate price with it. Assert it, do not assume it
-- [ ] The simulation posts through `ledger.posting`, so `flow(sku)` and `check_balances()`
-      hold across a whole 180-day run, not just one return
+Everything the plan listed is done except forecasting, which the simulation does not need:
+reordering is a reorder-point rule, and a forecast would add a component with no bearing on
+whether a batch was identified correctly.
+
+- [x] Demand generator, first-expired-first-out picker, reordering
+- [x] All policies, 600 seeds, paired, bootstrap confidence intervals
+- [x] `test_harm_is_real.py`, and `artifacts/harm.json` for the committed figures
+- [x] **The 180-day horizon was not long enough.** Answered above; it is now 540 days
+- [x] **The picker skips undated stock and non-active bins.** This was load-bearing: the cost
+      model charges nothing for the expiry risk of an undated hold, and that is only honest
+      if the picker really does skip it. `downstream/picking.py` filters on both, and the
+      simulation would show the harm if it did not
+- [x] The simulation checks `flow(sku)` and `check_balances()` over the whole 540 days, not
+      just one return
 
 ### P7 — Demo screen
 
@@ -922,13 +1090,15 @@ wasteful drift.
 ### P8 — Video
 
 - [ ] Follow the shot list in PLAN.md section 13
+- [ ] The harm chart now has real numbers behind it: `artifacts/harm.json`, and
+      `uv run python -m harness.counterfactual 600` reproduces them
 
 ---
 
 ## Open questions
 
-1. **Is 180 days long enough for the simulation?** Still unresolved, and still the main
-   risk. Check in P6 before tuning anything else.
+1. **Is 180 days long enough?** Settled, and the answer was no. It is 540 days now, and at
+   180 most seeds reported zero harm. Written up under P6.
 2. **Reliability model start point.** Settled: a committed synthetic history in
    `config/reliability.yaml`, so the numbers can be inspected and argued with.
 3. **Add a second label reader?** Not done. Would give two readers that fail in different
@@ -939,13 +1109,13 @@ wasteful drift.
    because a £0.30 lookup fee and an £8.53 review are similar in scale next to the harm at
    stake. S6 is now the thinnest at £0.30 between escalating and paying for a lookup. Worth
    re-checking once P6 gives real outcome data.
-6. **Correlated evidence.** The two remaining dangerous cases both come from a reused box
-   *and* a stale replica. The model treats "the records are incomplete" and "the label
-   belongs to another box" as independent, so it multiplies a 20% prior by a 1% label error
-   and lands at 0.24% — when in reality both are symptoms of the same thing, a consignment
-   our systems have lost track of. Making them correlated is a real change to the belief
-   model rather than a tweak, and the residual is already at the rate the reliability numbers
-   predict, so it is recorded here rather than done.
+6. **Correlated evidence.** Partly addressed. `EVIDENCE_WEIGHT` now discounts every
+   likelihood for the fact that the sources are not independent, which cut realised cost by
+   about a quarter and dangerous unit-days threefold. It is a blunt instrument: one weight
+   across all sources, rather than a model of *which* sources share *what*. The specific case
+   still unhandled is a reused box together with a stale replica, where both symptoms have
+   the same underlying cause. Modelling that properly means a joint likelihood rather than a
+   scalar, which is a real change.
 7. **Held stock is dated pessimistically, always.** A hold is dated at the earliest expiry
    any batch of the product has, whatever else the agent knows. That is safe and simple to
    state, but it means a hold costs the same shelf life whether the agent is nearly certain

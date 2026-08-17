@@ -1,0 +1,105 @@
+{
+  "seeds": 600,
+  "days": 540,
+  "paired": true,
+  "policies": {
+    "agent": {
+      "expired_units_shipped_per_run": 293.315,
+      "stockout_units_per_run": 7.985,
+      "escalations_per_run": 39.001666666666665,
+      "cost_gbp_per_run": 153851.60823202616
+    },
+    "trust the label": {
+      "expired_units_shipped_per_run": 374.31,
+      "stockout_units_per_run": 6.543333333333333,
+      "escalations_per_run": 35.10166666666667,
+      "cost_gbp_per_run": 156931.80628104575
+    },
+    "trust the records": {
+      "expired_units_shipped_per_run": 1756.7783333333334,
+      "stockout_units_per_run": 5.095,
+      "escalations_per_run": 7.495,
+      "cost_gbp_per_run": 222352.39450980394
+    },
+    "always escalate": {
+      "expired_units_shipped_per_run": 782.945,
+      "stockout_units_per_run": 8.553333333333333,
+      "escalations_per_run": 104.65333333333334,
+      "cost_gbp_per_run": 177912.57189542486
+    },
+    "always segregate": {
+      "expired_units_shipped_per_run": 128.535,
+      "stockout_units_per_run": 15.888333333333334,
+      "escalations_per_run": 0.0,
+      "cost_gbp_per_run": 213044.2282352941
+    },
+    "oracle": {
+      "expired_units_shipped_per_run": 0.0,
+      "stockout_units_per_run": 5.328333333333333,
+      "escalations_per_run": 0.0,
+      "cost_gbp_per_run": 142559.72594117647
+    }
+  },
+  "agent_against": {
+    "trust the label": {
+      "expired_units": {
+        "mean": -80.995,
+        "low": -121.42,
+        "high": -42.005
+      },
+      "cost_gbp": {
+        "mean": -3080.198049019608,
+        "low": -4744.62833006536,
+        "high": -1441.5883464052292
+      }
+    },
+    "trust the records": {
+      "expired_units": {
+        "mean": -1463.4633333333334,
+        "low": -1672.075,
+        "high": -1262.8266666666666
+      },
+      "cost_gbp": {
+        "mean": -68500.78627777778,
+        "low": -75944.90945098038,
+        "high": -61304.21318627451
+      }
+    },
+    "always escalate": {
+      "expired_units": {
+        "mean": -489.63,
+        "low": -532.0183333333333,
+        "high": -448.14666666666665
+      },
+      "cost_gbp": {
+        "mean": -24060.963663398692,
+        "low": -26083.49847712418,
+        "high": -22155.337960784313
+      }
+    },
+    "always segregate": {
+      "expired_units": {
+        "mean": 164.78,
+        "low": 127.51333333333334,
+        "high": 202.81333333333333
+      },
+      "cost_gbp": {
+        "mean": -59192.62000326798,
+        "low": -62811.03835620915,
+        "high": -55492.409604575165
+      }
+    },
+    "oracle": {
+      "expired_units": {
+        "mean": 293.315,
+        "low": 260.2966666666667,
+        "high": 328.5516666666667
+      },
+      "cost_gbp": {
+        "mean": 11291.882290849673,
+        "low": 9712.844209150328,
+        "high": 13004.28170261438
+      }
+    }
+  }
+}

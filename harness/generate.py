@@ -494,3 +494,142 @@ def build(seed: int, calibrated: bool = True) -> Case:
         registry_down=registry_down,
         ledger_down=ledger_down,
     )
+
+
+@dataclass
+class StreamCase:
+    """One return arriving into a warehouse that already exists.
+
+    `build` above makes a fresh world per case, which is what a single-decision
+    sweep wants. The simulation needs the opposite: many returns arriving into
+    one shared inventory over months, so that a batch filed wrongly in week two
+    is still on the shelf in week nine when somebody tries to ship it.
+
+    Everything about how the evidence goes wrong is the same code either way.
+    """
+
+    intake: ReturnIntake
+    truth: str
+    label: LabelEvidence
+    note: NoteFacts
+    wms: WmsClient
+    registry: BatchRegistry
+    ledger: ShipmentLedger
+    catalogue: dict[str, BatchSummary]
+    label_mode: LabelMode
+    record_mode: RecordMode
+
+
+@dataclass
+class StreamServices:
+    """What a policy sees for one return in the stream."""
+
+    case: StreamCase
+
+    def read_label(self, intake: ReturnIntake) -> LabelEvidence:
+        return self.case.label
+
+    def query_records(self, intake: ReturnIntake) -> RecordEvidence:
+        return self.case.wms.shipments_to(
+            intake.customer_id, intake.sku_id, asked_on=intake.arrived
+        )
+
+    def batch_catalogue(self, sku_id: str) -> dict[str, BatchSummary]:
+        return self.case.catalogue
+
+    def buy_registry(self, batch_ids: list[str]) -> RegistryEvidence:
+        return self.case.registry.lookup(batch_ids)
+
+    def buy_ledger(self, intake: ReturnIntake) -> LedgerEvidence:
+        return self.case.ledger.scans_for(intake.customer_id, intake.sku_id)
+
+    @property
+    def note_reader(self) -> FixedNoteReader:
+        """The note facts this return was generated with.
+
+        The recorded cassettes only cover the eight hand-written notes, so a
+        policy running against a generated stream has to take its note facts
+        from here instead.
+        """
+        return FixedNoteReader(self.case.note)
+
+
+def one_return(
+    world: World,
+    conn: object,
+    rng: random.Random,
+    return_id: str,
+    arrived: date,
+    calibrated: bool = True,
+    batches: list[Batch] | None = None,
+) -> StreamCase:
+    """Generate a single return against a world that already exists.
+
+    `batches` is the pool a return can really be drawn from, and it must be held
+    fixed. A simulation appends fresh batches as replenishment arrives, and if
+    those were allowed in here the pool would depend on when each policy happened
+    to reorder - which changes what is drawn, and quietly gives each policy a
+    different set of returns. The comparison is paired, so that would invalidate
+    it. It also would not be true: a return is stock we shipped, and we shipped
+    from the batches that existed at the time.
+    """
+    customer = world.customers[0]
+    batches = batches if batches is not None else world.batches
+    label_mode = _label_mode(rng, customer.repacks, calibrated)
+    record_mode = _record_mode(rng, calibrated)
+
+    sent_ids = {ln.batch_id for s in world.shipments for ln in s.lines}
+    on_record = [b for b in batches if b.batch_id in sent_ids]
+    off_record_batches = [b for b in batches if b.batch_id not in sent_ids]
+    wants_off_record = rng.random() < (0.15 if not calibrated else 0.05)
+
+    if wants_off_record and off_record_batches:
+        truth = rng.choice(off_record_batches)
+        truth_mode = TruthMode.OFF_RECORD
+    elif on_record:
+        truth = rng.choice(on_record)
+        truth_mode = TruthMode.ON_RECORD
+    else:
+        truth = rng.choice(batches)
+        truth_mode = TruthMode.OFF_RECORD
+
+    quantity = rng.randrange(20, 400)
+    intake = ReturnIntake(
+        return_id=return_id,
+        customer_id=customer.customer_id,
+        sku_id=world.skus[0].sku_id,
+        quantity=quantity,
+        arrived=arrived,
+        condition_note="generated note",
+        consignee_repacks=customer.repacks,
+    )
+
+    wms_faults = WmsFaults()
+    if record_mode is RecordMode.TIMEOUT:
+        wms_faults = WmsFaults(timeout=True)
+    elif record_mode is RecordMode.CONFLICTING:
+        wms_faults = WmsFaults(conflicting_rows=True)
+    elif record_mode is RecordMode.STALE and world.shipments:
+        newest = max(s.dispatched for s in world.shipments)
+        wms_faults = WmsFaults(stale_as_of=newest - timedelta(days=1))
+
+    others = [b for b in batches if b.batch_id != truth.batch_id]
+    wms = WmsClient(conn, wms_faults)  # type: ignore[arg-type]
+    return StreamCase(
+        intake=intake,
+        truth=truth.batch_id,
+        label=_label(label_mode, truth, others, intake, rng),
+        note=_note(rng, truth, truth_mode, label_mode),
+        wms=wms,
+        registry=BatchRegistry(
+            conn,  # type: ignore[arg-type]
+            LookupFaults(unavailable=rng.random() < (0.15 if not calibrated else 0.03)),
+        ),
+        ledger=ShipmentLedger(
+            conn,  # type: ignore[arg-type]
+            LookupFaults(unavailable=rng.random() < (0.15 if not calibrated else 0.03)),
+        ),
+        catalogue=wms.catalogue(world.skus[0].sku_id),
+        label_mode=label_mode,
+        record_mode=record_mode,
+    )

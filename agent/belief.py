@@ -86,11 +86,54 @@ def _normalise(log_weights: dict[str, float]) -> dict[str, float]:
     return {k: v / total for k, v in weights.items()}
 
 
-def update(belief: Belief, name: str, detail: str, likelihood: dict[str, float]) -> Belief:
-    """Multiply the current probabilities by a set of likelihoods."""
+#: How much genuinely new information each evidence source carries.
+#:
+#: Multiplying likelihoods assumes the sources are independent once you know the
+#: batch. They are not. A reused outer box carries a *genuine* label of a batch
+#: that genuinely went to that customer, so the records and the registry agree
+#: with the label precisely when the label is misleading. Treating those as three
+#: separate confirmations counts one fact three times.
+#:
+#: Weighting each log-likelihood by less than 1 is the standard correction. The
+#: value is measured on generated cases and checked on seed ranges that played no
+#: part in choosing it. On 4,000 fresh cases anything from 0.97 down to 0.90 is
+#: indistinguishable - the costs differ by under £1 a return against a 95%
+#: interval of about £15 - and every one of them beats 1.0, which leaves three
+#: times as many unit-days of expiry on the dangerous side. 0.95 is the smallest
+#: correction the evidence supports, so it is the one taken.
+#:
+#: Do not read it as a precise number. It is the middle of a band, and the band
+#: is what the measurement actually establishes. See status.md, "is the agent
+#: operating at the optimum".
+#:
+#: What it is not: a fudge factor for making the numbers look better. Setting it
+#: to 1.0 restores exact independence and the agent still works - it just decides
+#: worse, and more confidently.
+EVIDENCE_WEIGHT = 0.95
+
+
+def update(
+    belief: Belief,
+    name: str,
+    detail: str,
+    likelihood: dict[str, float],
+    weight: float | None = None,
+) -> Belief:
+    """Multiply the current probabilities by a set of likelihoods.
+
+    `weight` below 1 discounts the evidence for not being as independent of what
+    we already know as the arithmetic assumes. Pass 1.0 for a source that states
+    its own error rate, which needs no such correction - see `apply_constraints`.
+
+    Defaulting to ``None`` and reading the module value here, rather than as a
+    default argument, is deliberate: a default argument is fixed when the
+    function is defined, which would silently ignore anything that changes the
+    weight afterwards - including the experiments that set it.
+    """
+    applied = EVIDENCE_WEIGHT if weight is None else weight
     log_weights = {
         candidate: math.log(max(belief.probability[candidate], FLOOR))
-        + math.log(max(likelihood.get(candidate, FLOOR), FLOOR))
+        + applied * math.log(max(likelihood.get(candidate, FLOOR), FLOOR))
         for candidate in belief.probability
     }
     posterior = _normalise(log_weights)
@@ -290,13 +333,26 @@ def dispatch_likelihood(
 
 
 def apply_constraints(belief: Belief, violations: list[Violation]) -> Belief:
-    """Fold hard-rule breaches into the probabilities."""
+    """Fold hard-rule breaches into the probabilities.
+
+    Applied at full weight, unlike everything else. `EVIDENCE_WEIGHT` corrects
+    for corroborating sources sharing information: the records, the label and the
+    dispatch history agree partly because they describe the same consignment, so
+    counting each agreement in full counts one fact several times.
+
+    A constraint is not that kind of evidence. It does not agree with anything -
+    it rules a candidate out - and it already carries its own error rate in
+    `survives_with`, the chance the source that reported it is wrong. Discounting
+    it again would charge the same doubt twice, and it would blunt the one signal
+    that is meant to be sharp: a regulated source saying this batch never went to
+    this customer.
+    """
     if not violations:
         return belief
     factors = multipliers(violations)
     detail = "; ".join(v.detail for v in violations)
     likelihood = {c.name: factors.get(c.name, 1.0) for c in belief.candidates.candidates}
-    return update(belief, "constraints", detail, likelihood)
+    return update(belief, "constraints", detail, likelihood, weight=1.0)
 
 
 def describe(belief: Belief) -> str:

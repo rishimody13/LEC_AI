@@ -219,8 +219,8 @@ flowchart TB
     end
 
     subgraph D["Proof"]
-        SIM["180-day simulation\ndemand, FEFO picking,\nreordering, forecasting"]
-        CF["Compare agent vs\n4 fixed policies, 200 seeds"]
+        SIM["540-day simulation\ndemand, FEFO picking,\nreordering"]
+        CF["Compare agent vs\n4 fixed policies + oracle,\n600 seeds, paired"]
     end
 
     WG --> R
@@ -671,7 +671,7 @@ LEC_AI/
 │   ├── picking.py             FEFO picker
 │   ├── replenish.py           reordering
 │   ├── forecast.py            forecasting
-│   ├── simulate.py            180-day run
+│   ├── simulate.py            540-day run
 │   └── metrics.py             expired shipped, stock-out days, silent days
 ├── harness/
 │   ├── policies.py            agent + 4 fixed policies + oracle
@@ -718,7 +718,7 @@ short, drop case S6 first. Never drop P6 — it is the entire basis of R8.
 An anecdote is not proof. Proof is:
 
 1. A full simulation with known ground truth — demand, FEFO picking, reordering, forecasting.
-2. Every policy run on every case, 200 seeds, 180-day horizon.
+2. Every policy run on every case, 600 seeds, 540-day horizon, paired on every seed.
 3. Results reported with confidence intervals that exclude zero.
 4. A test that fails if the harm disappears.
 
@@ -775,7 +775,7 @@ If the harm were hypothetical, this test would fail. That is the point.
 | R5b — readable but conflicting | S4 trace: the check digit stays valid throughout |
 | R6 — all three responses | S1 (trust label), S4 (pay for lookup), S3 (human) |
 | R7 — no drift | `test_ledger.py`: append-only enforced by the database, units in equals units out, any decision reversible, checked against generated placements. Drift measured in `ledger/drift.py`, which is the only file allowed to see both the record and the truth |
-| R8 — real harm | `test_harm_is_real.py`, the results table, the drift chart |
+| R8 — real harm | `test_harm_is_real.py` and `artifacts/harm.json`: 22% fewer expired units than trusting the label, −81.0 [−121.4, −42.0] over 600 paired seeds, and cheaper too |
 | R9 — it works | `uv sync && uv run demo --scenario S4` on a clean machine, offline |
 | R10 — obvious is wrong | The video; S4 is built for this |
 
@@ -817,7 +817,7 @@ full 8 seconds, highlight one row at a time).
 
 | Risk | Mitigation |
 |---|---|
-| The harm is real but statistically weak | 200+ seeds, 180-day horizon, bootstrap intervals. Check in P6, not P8, that the horizon is long enough for misfiled stock to actually get picked. |
+| The harm is real but statistically weak | Settled in P6. 180 days was **not** long enough - six of eight trial seeds showed zero. The horizon is 540 days, the comparison is paired, and the intervals are bootstrapped over 600 seeds. |
 | The agent escalates too often and looks trivial | S1 and S2 assert near-zero escalation; escalation costs £14, so it loses when the evidence is clear |
 | The cases look contrived | Every failure is a documented real one — reused outer boxes, replica lag, `1`/`l` confusion. Say so in the README. |
 | The vision model reads damaged labels too well | Damage strength is a parameter; calibrate against measured accuracy in P2 and lock it |
@@ -843,7 +843,9 @@ full 8 seconds, highlight one row at a time).
 
 ## 16. Open questions for P1–P2
 
-1. **Is 180 days long enough?** The misfiled stock has to actually get picked inside the
+1. ~~**Is 180 days long enough?**~~ **Answered in P6: no.** It is 540 days now. The
+   original wording is kept below because the risk was correctly identified and would have
+   sunk the proof. The misfiled stock has to actually get picked inside the
    window, or the headline harm is zero by construction. Check this empirically in P6
    before tuning anything else. *This is the biggest live risk in the plan.*
 2. **Warm-start the reliability model?** Starting from a synthetic history of ~500 past
