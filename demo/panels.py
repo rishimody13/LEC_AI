@@ -92,6 +92,74 @@ class BeliefPanel:
 
 
 @dataclass
+class Frame:
+    """The agent's state after one piece of evidence, and what it would do now.
+
+    The brief asks for genuinely competing strategies chosen at runtime. A final
+    screenshot cannot show that: it shows one winner and no contest. Stepping
+    through shows the contest - which action is ahead after the records, after
+    the label, after the lookup - and, in the hero case, the winner changing.
+
+    `best_action` answers a real question: *if you had to put this stock on a
+    shelf right now, with only the evidence so far, what would you do?* It is
+    priced with the same code as the real decision. It is not the same question
+    the agent asks at decision one, which also weighs whether to buy more
+    evidence, and the screen says so rather than blurring the two.
+    """
+
+    index: int
+    name: str
+    detail: str
+    #: How well each candidate explains what was just seen: P(evidence | candidate).
+    #:
+    #: These are **not** probabilities of the candidates and do not add to 1. They
+    #: are probabilities of the *evidence*, one per hypothesis, so there is no
+    #: reason for them to normalise across hypotheses - and with four candidates
+    #: they routinely sum to about four. Bayes only ever uses their ratios.
+    #: Empty for the prior, which is not evidence.
+    likelihood: dict[str, float]
+    probability: dict[str, float]
+    #: Cheapest way of placing the stock, given only the evidence up to here.
+    best_action: str
+    best_cost_gbp: float
+    ranking: list[Option]
+    #: True when reaching this step meant paying for a lookup.
+    needed_a_lookup: bool = False
+
+    @property
+    def leader(self) -> tuple[str, float]:
+        name = max(self.probability, key=lambda k: self.probability[k])
+        return name, self.probability[name]
+
+    @property
+    def says_nothing(self) -> bool:
+        """True when this evidence does not separate the candidates at all.
+
+        Every candidate explains it equally well, so the ratios are all 1 and the
+        probabilities come out unchanged. Worth saying on screen rather than
+        showing a column of identical numbers and letting someone wonder.
+        """
+        if not self.likelihood:
+            return False
+        values = list(self.likelihood.values())
+        return max(values) - min(values) < 1e-9
+
+    @property
+    def relative_likelihood(self) -> dict[str, float]:
+        """Each candidate against the best-explained one.
+
+        This is the form that actually does the work. The update multiplies by
+        the likelihood, so only ratios matter: a candidate at 0.05 against a best
+        of 0.95 is nineteen times worse at explaining what we just saw, and the
+        raw numbers 0.05 and 0.95 mean nothing on their own.
+        """
+        if not self.likelihood:
+            return {}
+        best = max(self.likelihood.values()) or 1.0
+        return {name: value / best for name, value in self.likelihood.items()}
+
+
+@dataclass
 class Option:
     action: str
     expected_cost_gbp: float
@@ -169,10 +237,72 @@ class Screen:
     generated: bool = False
     #: How the case was built, for a generated one.
     faults: str = ""
+    #: One entry per piece of evidence, in the order it arrived.
+    frames: list[Frame] = field(default_factory=list)
 
     def image_path_is_absent(self) -> bool:
         """Generated cases have no photograph, and the screen says so."""
         return self.carton.image_path is None
+
+
+#: Evidence that can only be had by paying for a lookup.
+PAID_STEPS = {"constraints", "dispatch", "note dates"}
+
+
+def _frames(result: Any, quantity: int, today: date, costs: CostModel) -> list[Frame]:
+    """Replay the belief one step at a time, pricing the actions at each point."""
+    from agent import belief as belief_mod
+    from agent import policy as policy_mod
+
+    def priced(probability: dict[str, float]) -> tuple[str, float, list[Option]]:
+        state = belief_mod.Belief(
+            candidates=result.belief.candidates, probability=dict(probability)
+        )
+        choice = policy_mod.choose(
+            policy_mod.terminal_actions(state, quantity, costs, today), costs
+        )
+        ranking = [
+            Option(
+                action=o.action.label,
+                expected_cost_gbp=round(o.total, 2),
+                fee_gbp=round(o.fee, 2),
+                exposure={k: round(v, 3) for k, v in o.cost.exposure.items()},
+                chosen=o.action == choice.chosen.action,
+            )
+            for o in sorted(choice.options, key=lambda o: o.total)
+        ]
+        return choice.chosen.action.label, round(choice.chosen.total, 2), ranking
+
+    prior = dict(result.belief.candidates.prior)
+    action, cost, ranking = priced(prior)
+    frames = [
+        Frame(
+            index=0,
+            name="before any evidence",
+            detail="prior, from how much of each batch is in the building",
+            likelihood={},
+            probability=prior,
+            best_action=action,
+            best_cost_gbp=cost,
+            ranking=ranking,
+        )
+    ]
+    for i, step in enumerate(result.belief.steps, start=1):
+        action, cost, ranking = priced(step.posterior)
+        frames.append(
+            Frame(
+                index=i,
+                name=step.name,
+                detail=step.detail,
+                likelihood={k: round(v, 4) for k, v in step.likelihood.items()},
+                probability=dict(step.posterior),
+                best_action=action,
+                best_cost_gbp=cost,
+                ranking=ranking,
+                needed_a_lookup=step.name in PAID_STEPS,
+            )
+        )
+    return frames
 
 
 def _options(record: Any) -> list[Option]:
@@ -198,6 +328,7 @@ def load_harm() -> dict[str, Any] | None:
 
 def _assemble(
     *,
+    costs: CostModel,
     scenario_id: str,
     title: str,
     description: str,
@@ -256,6 +387,7 @@ def _assemble(
     return Screen(
         carton=carton,
         belief=belief,
+        frames=_frames(result, intake.quantity, intake.arrived, costs),
         decisions=[
             CostPanel(
                 name=d.name,
@@ -324,6 +456,7 @@ def build_generated(
         scenario_id=f"gen-{seed}",
     )
     return _assemble(
+        costs=costs,
         scenario_id=f"gen-{seed}",
         title=f"Generated case #{seed}",
         description=(
@@ -378,6 +511,7 @@ def build(
         home_bin={b.batch_id: b.home_bin for b in bench.world.batches},
     )
     return _assemble(
+        costs=costs,
         scenario_id=scenario_id,
         title=scenario.name,
         description=scenario.description.strip(),

@@ -61,13 +61,13 @@
       "options": [
         {
           "action": "gather batch_registry",
-          "expected_cost_gbp": 28.11,
+          "expected_cost_gbp": 19.06,
           "exposure": {},
           "fee_gbp": 0.3
         },
         {
           "action": "gather batch_registry+shipment_ledger",
-          "expected_cost_gbp": 28.51,
+          "expected_cost_gbp": 19.46,
           "exposure": {},
           "fee_gbp": 0.7
         },
@@ -133,27 +133,39 @@
       ],
       "chosen": "gather batch_registry",
       "margin_gbp": 0.4,
-      "margin_share": 0.0142,
-      "fragile": true,
+      "margin_share": 0.021,
+      "fragile": false,
       "sensitivity": []
     },
     {
       "name": "where it goes",
       "belief": {
-        "B-2288": 0.8359,
-        "B-2290": 0.1587,
+        "B-2288": 0.8398,
+        "B-2290": 0.1594,
         "B-2291": 0.0,
-        "other": 0.0054
+        "other": 0.0008
       },
       "options": [
         {
           "action": "commit B-2288 -> A-07-02",
-          "expected_cost_gbp": 27.81,
+          "expected_cost_gbp": 18.76,
           "exposure": {
-            "shelf_waste_unit_day": 186.621,
-            "misattribution_unit": 13.33,
+            "shelf_waste_unit_day": 187.471,
+            "misattribution_unit": 13.391,
             "wrong_zone": 0.159,
-            "expired_unit": 0.225
+            "expired_unit": 0.035
+          },
+          "fee_gbp": 0.0
+        },
+        {
+          "action": "segregate -> H-01-01",
+          "expected_cost_gbp": 25.74,
+          "exposure": {
+            "wrong_zone": 0.999,
+            "shelf_waste_unit_day": 187.471,
+            "expired_unit": 0.035,
+            "deferred_review": 1.0,
+            "misattribution_unit": 13.461
           },
           "fee_gbp": 0.0
         },
@@ -168,69 +180,38 @@
           "fee_gbp": 0.0
         },
         {
-          "action": "segregate -> H-01-01",
-          "expected_cost_gbp": 35.15,
-          "exposure": {
-            "wrong_zone": 0.995,
-            "shelf_waste_unit_day": 186.621,
-            "expired_unit": 0.225,
-            "deferred_review": 1.0,
-            "misattribution_unit": 13.78
-          },
-          "fee_gbp": 0.0
-        },
-        {
           "action": "commit B-2290 -> A-07-05",
-          "expected_cost_gbp": 3450.54,
+          "expected_cost_gbp": 3457.08,
           "exposure": {
-            "expired_unit": 70.445,
-            "misattribution_unit": 70.22,
-            "wrong_zone": 0.836
+            "expired_unit": 70.574,
+            "misattribution_unit": 70.54,
+            "wrong_zone": 0.84
           },
           "fee_gbp": 0.0
         },
         {
           "action": "commit B-2291 -> C-04-01",
-          "expected_cost_gbp": 4103.49,
+          "expected_cost_gbp": 4113.0,
           "exposure": {
-            "expired_unit": 83.774,
-            "misattribution_unit": 83.549,
-            "wrong_zone": 0.995
+            "expired_unit": 83.964,
+            "misattribution_unit": 83.929,
+            "wrong_zone": 0.999
           },
           "fee_gbp": 0.0
         }
       ],
       "chosen": "commit B-2288 -> A-07-02",
-      "margin_gbp": 1.69,
-      "margin_share": 0.0606,
+      "margin_gbp": 6.98,
+      "margin_share": 0.372,
       "fragile": false,
-      "sensitivity": [
-        {
-          "parameter": "misattribution_unit",
-          "now_gbp": 0.96,
-          "flips_at_gbp": 1.09,
-          "slack_x": 1.1
-        },
-        {
-          "parameter": "expired_unit",
-          "now_gbp": 48.0,
-          "flips_at_gbp": 39.35,
-          "slack_x": 1.2
-        },
-        {
-          "parameter": "human_review",
-          "now_gbp": 8.53,
-          "flips_at_gbp": 6.85,
-          "slack_x": 1.2
-        }
-      ]
+      "sensitivity": []
     }
   ],
   "spend_gbp": 0.3,
   "outcome": "commit B-2288 -> A-07-02",
   "notes": [
     "who to believe: no single cost figure can be moved to a sensible value that would change this. The decision does not rest on the cost table.",
-    "who to believe: only \u00a31.39 (4.9%) ahead of 'escalate', which would lead somewhere different. A decision this close rests on a chosen parameter rather than on the evidence."
+    "where it goes: no single cost figure can be moved to a sensible value that would change this. The decision does not rest on the cost table."
   ],
   "stock_movements": [
     {

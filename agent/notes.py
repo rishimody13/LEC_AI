@@ -182,18 +182,42 @@ def note_date_likelihood(
 
     Only usable once we know when each batch was made, which comes from the paid
     registry lookup. Before that a date says nothing about which batch it is.
+
+    The catch-all needs scoring like everything else, and getting that wrong is
+    easy. It used to be left at "no information", which is 1.0 - *higher* than
+    the 0.55 a batch whose date actually matches gets. So a print date came out
+    as evidence in favour of "some batch nobody named" over the very batch it
+    matched. On screen the catch-all showed as the best explanation of a date
+    that identified a named batch, which is how it was noticed.
+
+    A batch nobody named is simply a batch whose date we cannot look up, so:
+
+    - **Some named batch matches the date.** Then the date is already explained.
+      An unlisted batch happening to share it is no more likely than any other
+      mismatch, so it scores the same as one.
+    - **Nothing we know matches.** Then somebody read a real date off the goods
+      and it belongs to none of our candidates, which is evidence the answer is
+      not on the list. The catch-all gets the matching score.
     """
     out = {c.name: P_NO_INFORMATION for c in candidates.candidates}
     if not facts.print_dates or registry is None or not registry.available:
         return out
 
+    checked = False
+    matched = False
     for c in candidates.candidates:
         if c.is_catch_all or c.batch_id is None:
             continue
         record = registry.record(c.batch_id)
         if record is None:
             continue
-        out[c.name] = (
-            P_DATE_MATCHES if record.manufactured in facts.print_dates else P_DATE_MISMATCH
-        )
+        checked = True
+        hit = record.manufactured in facts.print_dates
+        matched = matched or hit
+        out[c.name] = P_DATE_MATCHES if hit else P_DATE_MISMATCH
+
+    if checked:
+        for c in candidates.candidates:
+            if c.is_catch_all or c.batch_id is None:
+                out[c.name] = P_DATE_MISMATCH if matched else P_DATE_MATCHES
     return out

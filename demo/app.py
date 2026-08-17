@@ -83,6 +83,94 @@ def belief_pane(belief: panels.BeliefPanel) -> None:
     st.dataframe(frame.style.format("{:.3f}"), width="stretch")
 
 
+def step_panes(screen: panels.Screen, index: int) -> None:
+    """The belief and the cost table as they stood after one piece of evidence."""
+    frame = screen.frames[index]
+    previous = screen.frames[index - 1] if index else None
+
+    st.subheader("What it might be")
+    st.caption(f"**Step {frame.index} of {len(screen.frames) - 1}** — after {frame.name}")
+    st.write(frame.detail)
+
+    order = sorted(frame.probability, key=lambda k: -frame.probability[k])
+    st.bar_chart(pd.DataFrame({"probability": frame.probability}).loc[order], horizontal=True)
+
+    name, probability = frame.leader
+    if previous and previous.leader[0] != name:
+        st.warning(
+            f"The most likely answer just changed: **{previous.leader[0]} → {name}**. "
+            f"Nothing was reconsidered — one new piece of evidence moved it.",
+            icon="🔄",
+        )
+    st.write(f"**Most likely:** `{name}` at {probability:.1%}")
+
+    if frame.says_nothing:
+        st.caption(
+            "This evidence explains every candidate equally well, so it does not separate "
+            "them and the probabilities above are unchanged."
+        )
+    elif frame.likelihood:
+        order = sorted(frame.likelihood, key=lambda k: -frame.likelihood[k])
+        relative = frame.relative_likelihood
+        st.caption(
+            "**How well each candidate explains what we just saw** — not a probability of the "
+            "candidate, and deliberately not adding to 1. These are probabilities of the "
+            "*evidence*, one per hypothesis, so only the ratios in the last column matter."
+        )
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {
+                        "candidate": name,
+                        "explains it": round(frame.likelihood[name], 4),
+                        "against the best": (
+                            "best" if relative[name] >= 1.0 else f"{1 / relative[name]:.0f}x worse"
+                        ),
+                    }
+                    for name in order
+                ]
+            ),
+            width="stretch",
+            hide_index=True,
+        )
+    if frame.needed_a_lookup:
+        st.info("This evidence had to be paid for. It is not free to know.", icon="💷")
+
+
+def step_cost_pane(screen: panels.Screen, index: int) -> None:
+    frame = screen.frames[index]
+    previous = screen.frames[index - 1] if index else None
+
+    st.subheader("If it had to place the stock now")
+    st.caption(
+        "Every way of finishing with this return, priced with only the evidence up to this "
+        "step. This is not quite the question the agent asks first — that one also weighs "
+        "whether to buy more evidence — but it is priced with the same code."
+    )
+    st.dataframe(
+        pd.DataFrame(
+            [
+                {
+                    "action": o.action,
+                    "expected cost £": o.expected_cost_gbp,
+                    "chosen": "✔" if o.chosen else "",
+                }
+                for o in frame.ranking
+            ]
+        ),
+        width="stretch",
+        hide_index=True,
+    )
+    if previous and previous.best_action != frame.best_action:
+        st.success(
+            f"**The best action just changed:** `{previous.best_action}` → "
+            f"`{frame.best_action}`. Genuinely competing strategies, decided at runtime.",
+            icon="⚡",
+        )
+    else:
+        st.write(f"**Would choose** `{frame.best_action}` at £{frame.best_cost_gbp:.2f}")
+
+
 def cost_pane(decision: panels.CostPanel) -> None:
     st.subheader(f"Decision: {decision.name}")
     frame = pd.DataFrame(
@@ -213,16 +301,41 @@ def main() -> None:
         st.sidebar.write("**Bought:** " + ", ".join(screen.bought))
     st.sidebar.caption(f"Built in {time.perf_counter() - started:.1f}s, entirely offline.")
 
+    stepping = st.sidebar.checkbox(
+        "Step through the evidence",
+        value=False,
+        help=(
+            "Replay the case one source at a time and watch which action is ahead after each. "
+            "On the hero case the most likely answer changes three times."
+        ),
+    )
+    index = 0
+    if stepping:
+        index = st.sidebar.slider(
+            "Evidence applied",
+            0,
+            len(screen.frames) - 1,
+            len(screen.frames) - 1,
+            format="step %d",
+        )
+        st.sidebar.caption(f"after **{screen.frames[index].name}**")
+
     top_left, top_right = st.columns(2)
     with top_left:
         carton_pane(screen.carton)
     with top_right:
-        belief_pane(screen.belief)
+        if stepping:
+            step_panes(screen, index)
+        else:
+            belief_pane(screen.belief)
 
     bottom_left, bottom_right = st.columns(2)
     with bottom_left:
-        for decision in screen.decisions:
-            cost_pane(decision)
+        if stepping:
+            step_cost_pane(screen, index)
+        else:
+            for decision in screen.decisions:
+                cost_pane(decision)
     with bottom_right:
         consequence_pane(screen.consequence)
         with st.expander("Stock movements this decision caused"):

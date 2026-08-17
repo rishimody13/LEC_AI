@@ -1,6 +1,7 @@
 # Reading the screen
 
 **Repo:** [README.md](../README.md) · **Progress:** [status.md](../status.md)
+· **Video script:** [SCRIPT.md](./SCRIPT.md)
 
 ```bash
 uv sync --extra demo
@@ -57,6 +58,41 @@ names shown — and if it is wrong about that, everything downstream is wrong wi
 **A flat chart is not a malfunction.** The amber "no candidate is clearly ahead" note means the
 evidence genuinely does not separate the options. That is the honest state, and it is what
 makes paying for a lookup or calling a person worth doing.
+
+### Stepping through the evidence
+
+Tick **"step through the evidence"** in the sidebar and a slider appears. It replays the case
+one source at a time: the belief after each piece, what that piece said about each candidate,
+and — the useful part — **every action priced with only the evidence up to that point.**
+
+A final screenshot cannot show a contest. It shows one winner. This shows the contest.
+
+On the hero case the most likely answer **changes three times**:
+
+| Step | After | Leader | What just happened |
+|---|---|---|---|
+| 0 | nothing | `B-2291` 51% | The prior. There is simply more of this batch in the building |
+| 1 | shipment records | `B-2288` 52% | The records overturn it |
+| 2 | the carton label | `B-2291` 61% | **The trap.** A clean, valid label drags it back to the wrong answer |
+| 3 | the note | `B-2291` 61% | Nothing here; no lot code in this one |
+| 4 | constraints *(paid)* | `B-2288` 58% | The registry: `B-2291` cleared quality control after the shipment left |
+| 5 | dispatch *(paid)* | `B-2288` 59% | Door scans agree |
+| 6 | print date *(paid)* | `B-2288` 84% | Settled — and the best action changes from escalate to commit |
+
+Two banners fire as you drag:
+
+- **Amber — "the most likely answer just changed"**, at steps 1, 2 and 4. Nothing was
+  reconsidered or retried; one new piece of evidence moved it.
+- **Green — "the best action just changed"**, at step 6. Escalate becomes commit. That is
+  "genuinely competing strategies, decided at runtime" as a thing you can watch rather than a
+  claim in a README.
+
+Steps needing a paid lookup are marked. Knowing is not free.
+
+**One honest caveat, stated on the pane itself:** "if it had to place the stock now" is not
+quite the question the agent asks at its first decision, which *also* weighs whether to buy
+more evidence. It is priced with the same code, but it is a slightly different question and the
+screen says so rather than blurring the two.
 
 ### Bottom left — the cost table
 
@@ -150,7 +186,8 @@ The **"world matches the reliability model"** tick is worth understanding:
 |---|---|
 | **418** | **The agent failing, honestly.** A reused label and a stale replica, so nothing anywhere names the true batch. It commits confidently and is wrong by 253 days |
 | 52 | A reused label with the warehouse system down. No batch list, so it holds the stock rather than guessing |
-| 7 | A large return with clean evidence, and it *still* escalates — because at 1,192 units a person costs less than the risk left over |
+| 24 | 441 units and the label is **destroyed**. It escalates: past about a hundred units a person costs less than the risk left after a lookup |
+| 7 | 1,192 units, clean evidence, and it commits — correctly. Large does not mean timid |
 | 99, 1001 | Ordinary cases, for contrast |
 
 Same seed, same case, every time — so a demo can be rehearsed.

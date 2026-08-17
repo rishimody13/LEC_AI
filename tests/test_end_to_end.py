@@ -471,9 +471,14 @@ def test_the_guide_lists_seeds_that_do_what_it_says():
     held = panels.build_generated(52, COSTS, RELIABILITY)
     assert held.outcome.startswith("segregate"), "seed 52 is the hold-it-back case"
 
-    big = panels.build_generated(7, COSTS, RELIABILITY)
-    assert big.outcome.startswith("escalated"), "seed 7 is the large-return escalation"
-    assert big.carton.quantity > 500
+    escalated = panels.build_generated(24, COSTS, RELIABILITY)
+    assert escalated.outcome.startswith("escalated"), "seed 24 is the large-return escalation"
+    assert escalated.carton.quantity > 400
+
+    decided = panels.build_generated(7, COSTS, RELIABILITY)
+    assert decided.outcome.startswith("commit"), "seed 7 is the large return it does decide"
+    assert decided.carton.quantity > 500
+    assert not decided.consequence.obvious_answer_was_wrong
 
 
 def test_every_case_the_guide_describes_exists():
@@ -610,3 +615,118 @@ def test_a_return_of_nothing_or_less_is_refused(quantity):
             quantity=quantity,
             arrived=date(2026, 8, 15),
         )
+
+
+# ------------------------------------------- stepping through the evidence
+
+
+@pytest.mark.parametrize("scenario_id", IDS)
+def test_every_case_can_be_replayed_one_source_at_a_time(scenario_id, screens):
+    """The brief asks for competing strategies chosen at runtime.
+
+    A final screenshot cannot show that - it shows one winner and no contest.
+    These frames are the contest: the belief and the priced options after each
+    piece of evidence.
+    """
+    screen = screens[scenario_id]
+    assert len(screen.frames) == len(screen.belief.steps) + 1, "a frame per step, plus the prior"
+
+    first, last = screen.frames[0], screen.frames[-1]
+    assert first.name == "before any evidence"
+    assert not first.likelihood, "the prior is not evidence"
+    assert last.probability == pytest.approx(screen.belief.final)
+
+    for frame in screen.frames:
+        assert sum(frame.probability.values()) == pytest.approx(1.0)
+        assert frame.ranking, "every step must offer something to choose between"
+        cheapest = min(o.expected_cost_gbp for o in frame.ranking)
+        picked = next(o for o in frame.ranking if o.chosen)
+        assert picked.expected_cost_gbp <= cheapest + 1e-6
+        assert sum(o.chosen for o in frame.ranking) == 1
+
+
+def test_the_hero_case_shows_the_answer_changing_as_evidence_arrives():
+    """The single most useful thing the step-through does.
+
+    On S4 the leader changes three times: the prior favours the batch the label
+    claims, the records overturn it, the clean label pulls it *back*, and only
+    the paid lookup settles it. That is what "genuinely competing strategies"
+    looks like, and a static view of the final state hides all of it.
+    """
+    screen = panels.build("S4", COSTS, RELIABILITY)
+    leaders = [f.leader[0] for f in screen.frames]
+    changes = sum(1 for a, b in zip(leaders, leaders[1:], strict=False) if a != b)
+    assert changes >= 3, f"expected the leader to change repeatedly, got {leaders}"
+
+    actions = [f.best_action for f in screen.frames]
+    assert actions[0] != actions[-1], "the best action must change as evidence arrives"
+    assert actions[-1].startswith("commit"), "it should end up willing to file the stock"
+
+
+def test_paid_evidence_is_marked_as_paid():
+    """Which steps cost money is part of the argument, not decoration."""
+    screen = panels.build("S4", COSTS, RELIABILITY)
+    free = [f.name for f in screen.frames if not f.needed_a_lookup]
+    paid = [f.name for f in screen.frames if f.needed_a_lookup]
+    assert "records" in free and "label" in free
+    assert paid, "the hero case buys a lookup, so some steps must be marked paid"
+
+
+def test_the_screen_can_step_through_evidence():
+    pytest.importorskip("streamlit", reason="the demo extra is not installed")
+    from streamlit.testing.v1 import AppTest
+
+    app_path = Path(__file__).resolve().parent.parent / "demo" / "app.py"
+    app = AppTest.from_file(str(app_path), default_timeout=180).run()
+    app.sidebar.checkbox[0].set_value(True).run()
+    assert not app.exception, [str(e) for e in app.exception]
+
+    slider = app.sidebar.slider[0]
+    assert slider.max == len(panels.build("S4", COSTS, RELIABILITY).frames) - 1
+
+    seen_leader_change = False
+    seen_action_change = False
+    for step in range(int(slider.max) + 1):
+        app.sidebar.slider[0].set_value(step).run()
+        assert not app.exception, [str(e) for e in app.exception]
+        seen_leader_change |= any("most likely answer just changed" in w.value for w in app.warning)
+        seen_action_change |= any("best action just changed" in s.value for s in app.success)
+    assert seen_leader_change, "the hero case must visibly change its mind on screen"
+    assert seen_action_change, "and must visibly change what it would do"
+
+
+def test_a_print_date_never_favours_the_batch_nobody_named():
+    """Found by looking at the step-through on screen.
+
+    The catch-all used to be left at "no information", which is 1.0 — higher than
+    the 0.55 a batch whose manufacture date actually matches gets. So a print
+    date came out as evidence *for* "some batch nobody named" over the very batch
+    it identified, and the screen showed `other` as the best explanation of it.
+    """
+    from agent.notes import P_DATE_MATCHES, NoteFacts, note_date_likelihood
+    from services.scenarios import build_bench
+
+    bench = build_bench(SCENARIOS["S4"])
+    facts = notes.CassetteNoteReader().read(bench.intake.condition_note)
+    assert facts.print_dates, "S4's note must carry a print date"
+
+    result = loop.run(
+        bench.intake, BenchServices(bench), COSTS, RELIABILITY, notes.CassetteNoteReader()
+    )
+    registry = BenchServices(bench).buy_registry(
+        [c.batch_id for c in result.belief.candidates.candidates if c.batch_id]
+    )
+    likelihood = note_date_likelihood(facts, result.belief.candidates, registry)
+
+    best = max(likelihood, key=lambda k: likelihood[k])
+    assert best != "other", (
+        f"the catch-all explains the print date best, which is backwards: {likelihood}"
+    )
+    assert likelihood[best] == pytest.approx(P_DATE_MATCHES)
+
+    # And when nothing known matches, the date *is* evidence the answer is unlisted.
+    nothing_matches = note_date_likelihood(
+        NoteFacts(print_dates=[date(1999, 1, 1)]), result.belief.candidates, registry
+    )
+    assert nothing_matches["other"] == pytest.approx(P_DATE_MATCHES)
+    assert nothing_matches["other"] > nothing_matches[best]

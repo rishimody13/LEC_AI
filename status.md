@@ -8,7 +8,7 @@ Phases P0 to P7 are done. The agent works end to end on all twelve test cases: i
 evidence, works out probabilities, decides who to believe, decides where the stock goes, and
 writes that decision to an append-only stock ledger that can be traced back and undone.
 The harm is now measured rather than asserted: over 600 seeded runs of eighteen
-months each, the agent ships **24% fewer expired units** than trusting the label, and the
+months each, the agent ships **25% fewer expired units** than trusting the label, and the
 confidence interval excludes zero. The demo screen is
 built and renders offline in well under a second. Next is filming (P8).
 
@@ -24,7 +24,7 @@ P7 demo screen  [####################] done
 P8 video        [                    ] next
 ```
 
-**Current state:** 693 tests pass, ruff clean, mypy strict clean. Everything runs offline.
+**Current state:** 709 tests pass, ruff clean, mypy strict clean. Everything runs offline.
 
 Building the ledger found four real faults, all of them in the direction that ships expired
 stock. They are written up under "what the ledger found" below, each with a named regression
@@ -82,7 +82,7 @@ decision produced, so the trace and the stock record are the same document.
 |---|---:|---|
 | `test_generalises.py` | 203 | Properties across 1-400 units on the hand-written cases |
 | `test_harm_is_real.py` | 14 | The R8 proof: policies compared over 18 months, with intervals |
-| `test_end_to_end.py` | 119 | Image to shelf, the demo screen, and uncertainty probed hard |
+| `test_end_to_end.py` | 135 | Image to shelf, the demo screen, and uncertainty probed hard |
 | `test_simulation.py` | 26 | The simulator itself: picking rules, truth tracking, scoring |
 | `test_ledger.py` | 109 | The stock record: append-only, conserved, reversible, and its drift |
 | `test_sweep.py` | 49 | The agent against generated cases nobody wrote |
@@ -99,7 +99,7 @@ decision produced, so the trace and the stock record are the same document.
 | `test_wms_client.py` | 8 | Each warehouse fault leaves the right symptom |
 | `test_coding.py` | 5 | Check digits, including the exhaustive single-digit proof |
 | `test_isolation.py` | 4 | Neither `agent/` nor `ledger/` can import ground truth |
-| **Total** | **693** | |
+| **Total** | **709** | |
 
 ---
 
@@ -958,6 +958,40 @@ candidate appears, and that an invented code is rejected. All of them passed thr
 of them asked whether it *changed a decision*. There are now two that do, one on S7 and one
 across 600 generated cases, and they fail if the contribution goes inert again.
 
+### Stepping through the evidence, and what it showed
+
+The demo can now replay a case one source at a time, pricing every action after each piece.
+That was built to answer the brief's "genuinely competing strategies at runtime" — a final
+screenshot shows one winner and no contest — and on the hero case the leading candidate changes
+**three times**: the prior favours the batch the label claims, the records overturn it, the
+clean label drags it back, and only the paid lookup settles it. The best action changes from
+escalate to commit at the last step.
+
+Putting the working on screen immediately surfaced two things.
+
+**The likelihood table was mislabelled.** It sat under a bar chart of probabilities with values
+that do not add to 1, which invites exactly the question it got. They are P(evidence |
+candidate) — probabilities of the *evidence*, one per hypothesis — so they have no reason to
+normalise across hypotheses, and with four candidates they routinely sum to about four. Checked
+across 7,159 values on 600 cases: every one is inside [0, 1], so the numbers were right and the
+presentation was wrong. The pane now says what they are, flags evidence that says nothing at
+all, and shows the ratio to the best candidate, which is the only part Bayes actually uses.
+
+**A print date favoured the batch nobody named.** Visible on screen as `other` being the *best*
+explanation of a date that identified a named batch. The catch-all was left at "no information"
+— 1.0 — which is higher than the 0.55 a matching batch gets, so a print date came out as
+evidence *for* an unlisted batch over the very batch it matched. Same class of fault as the
+flat catch-all found earlier: the catch-all scored on a different scale from everything else.
+
+It now scores like what it is, a batch whose date cannot be looked up: the mismatch rate when
+some named batch already explains the date, and the *matching* rate when nothing known does —
+because a real print date belonging to none of your candidates is evidence the answer is not on
+your list. Correct commits went from 1,071/1,109 to **1,084/1,122**, and the headline against
+trusting the label from −89.4 to **−93.7 expired units**.
+
+Neither would have been found by reading the code. Both were obvious the moment the
+intermediate state was on a screen.
+
 ### A return of nothing, or less
 
 Probing edge cases while writing the README turned up an input the agent accepted silently and
@@ -1088,7 +1122,7 @@ construction and prove nothing.
 
 | policy | expired units | stock-out | escalations | £ per run | £ above the floor |
 |---|---:|---:|---:|---:|---:|
-| **agent** | **284.9** | 7.8 | 37.6 | 152,143 | **15,227** |
+| **agent** | **280.6** | 7.8 | 36.9 | 151,993 | **15,077** |
 | trust the label | 374.3 | 6.5 | 35.1 | 155,671 | 18,755 |
 | trust the records | 1,756.8 | 5.1 | 7.5 | 221,091 | 84,175 |
 | always escalate | 782.9 | 8.6 | 104.7 | 176,652 | 39,736 |
@@ -1101,7 +1135,7 @@ any decision about a return**: a fixed order-up-to level with no forecasting lea
 stock behind shorter-dated deliveries in the queue until some ages out. Every policy that files
 stock pays it within 1%, which is what makes it a floor. Against the whole figure the agent
 looks 2% better than trusting the label; against the part decisions actually control, it is
-**19% better**.
+**20% better**.
 
 This is also why the oracle costs £136,916 rather than nothing: knowing the answer removes
 every expired unit, every escalation and every lookup, and leaves exactly that write-off. The
@@ -1114,13 +1148,13 @@ the agent is better:
 
 | against | expired units | total £ |
 |---|---|---|
-| trust the label | **−89.4 [−129.5, −50.6]** | **−3,528 [−5,193, −1,902]** |
-| trust the records | −1,471.8 [−1,681.0, −1,270.3] | −68,948 [−76,422, −61,735] |
-| always escalate | −498.0 [−541.5, −456.6] | −24,508 [−26,573, −22,571] |
-| always segregate | +156.4 [+119.1, +194.1] | −59,640 [−63,304, −55,927] |
-| oracle | +284.9 [+252.4, +320.3] | +15,227 [+13,692, +16,884] |
+| trust the label | **−93.7 [−133.1, −56.0]** | **−3,678 [−5,316, −2,108]** |
+| trust the records | −1,476.2 [−1,684.7, −1,275.1] | −69,098 [−76,579, −61,917] |
+| always escalate | −502.4 [−546.2, −461.6] | −24,658 [−26,736, −22,693] |
+| always segregate | +152.0 [+115.3, +189.0] | −59,790 [−63,420, −56,099] |
+| oracle | +280.6 [+248.9, +314.8] | +15,077 [+13,568, +16,715] |
 
-**The headline: 24% fewer expired units than trusting the label, and cheaper, both intervals
+**The headline: 25% fewer expired units than trusting the label, and cheaper, both intervals
 excluding zero.** The agent beats every runnable policy on both counts. It does not beat the
 oracle, and should not — that is the floor.
 
@@ -1296,7 +1330,9 @@ hundred units, and that point is set by `human_error_rate` - a hand-set figure.
 
 ### P8 — Video
 
-- [ ] Follow the shot list in PLAN.md section 13
+- [ ] Follow [demo/SCRIPT.md](./demo/SCRIPT.md) — timed to 447 spoken words, with the cuts to
+      make if it runs long, and the questions to expect written out with answers
+- [ ] `uv run python -m demo.flip` is the on-camera proof that there is no default branch
 - [ ] The harm chart now has real numbers behind it: `artifacts/harm.json`, and
       `uv run python -m harness.counterfactual 600` reproduces them
 

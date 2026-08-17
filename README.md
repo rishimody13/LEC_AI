@@ -1,13 +1,13 @@
 # RECONCILE — deciding what a returned carton actually is
 
 **Repo:** `LEC_AI` · **Brief:** [objectives.md](./objectives.md) · **Plan:** [PLAN.md](./PLAN.md)
-· **Progress:** [status.md](./status.md) · **Demo guide:** [demo/GUIDE.md](./demo/GUIDE.md)
+· **Progress:** [status.md](./status.md) · **Demo guide:** [demo/GUIDE.md](./demo/GUIDE.md) · **Video script:** [demo/SCRIPT.md](./demo/SCRIPT.md)
 · **Design options:** [architecture-options.md](./architecture-options.md)
 · **Where the model is used:** [llm-integration.md](./llm-integration.md)
 
 ```bash
 uv sync --extra dev --extra demo
-uv run pytest                              # 693 tests
+uv run pytest                              # 709 tests
 uv run streamlit run demo/app.py           # the screen
 uv run python -m harness.sweep 2000        # the agent against cases nobody wrote
 uv run python -m harness.counterfactual 600  # the harm, measured
@@ -54,8 +54,8 @@ and compared, and the cheapest wins.
 | R5 | Unreadable labels *and* readable-but-contradicted ones | Cases S2/S3 and S4/S8 |
 | R6 | Trust, pay to check, or escalate | All four actions win somewhere |
 | R7 | Assign stock without causing drift | `ledger/` — append-only, reversible, drift measured against truth |
-| R8 | Prove the harm, measured | 600 paired 540-day simulations: **24% fewer expired units** than trusting the label |
-| R9 | Working code | 693 tests, ruff and mypy strict clean, runs offline |
+| R8 | Prove the harm, measured | 600 paired 540-day simulations: **25% fewer expired units** than trusting the label |
+| R9 | Working code | 709 tests, ruff and mypy strict clean, runs offline |
 | R10 | A case where the obvious answer is wrong | S4, and the demo says so on screen |
 
 ---
@@ -216,6 +216,12 @@ structurally rather than by discipline: `LabelReading` and `NoteFacts` have no f
 judgement could be expressed. There is nowhere for the model to say which batch it thinks the
 stock is, or what should be done. Even a drifting prompt could not carry the answer.
 
+The demo can **replay any case one source at a time**, pricing every action after each piece of
+evidence. On the hero case the leading candidate changes three times — the prior favours the
+batch the label claims, the records overturn it, the clean label drags it back, and only the
+paid lookup settles it — and the best action changes from escalate to commit at the last step.
+That is the "genuinely competing strategies at runtime" requirement as something you can watch.
+
 **What the model contributes that a database query cannot.** A warehouse note saying
 *"cross-docked from the Halden depot, inner cases stamped B-2296"* is prose. No `SELECT` will
 ever find that code. The model reads it out; `agent/candidates.py` checks it against the real
@@ -298,7 +304,7 @@ result.
 
 | policy | expired units shipped | £ per run | £ above the floor |
 |---|---:|---:|---:|
-| **agent** | **284.9** | 152,143 | **15,227** |
+| **agent** | **280.6** | 151,993 | **15,077** |
 | trust the label | 374.3 | 155,671 | 18,755 |
 | trust the records | 1,756.8 | 221,091 | 84,175 |
 | always escalate | 782.9 | 176,652 | 39,736 |
@@ -309,10 +315,10 @@ Paired against each alternative, 95% bootstrap intervals. Negative means the age
 
 | against | expired units | total £ |
 |---|---|---|
-| trust the label | **−89.4 [−129.5, −50.6]** | **−3,528 [−5,193, −1,902]** |
-| trust the records | −1,472 [−1,681, −1,270] | −68,948 [−76,422, −61,735] |
-| always escalate | −498 [−542, −457] | −24,508 [−26,573, −22,571] |
-| always segregate | +156 [+119, +194] | −59,640 [−63,304, −55,927] |
+| trust the label | **−93.7 [−133.1, −56.0]** | **−3,678 [−5,316, −2,108]** |
+| trust the records | −1,476 [−1,685, −1,275] | −69,098 [−76,579, −61,917] |
+| always escalate | −502 [−546, −462] | −24,658 [−26,736, −22,693] |
+| always segregate | +152 [+115, +189] | −59,790 [−63,420, −56,099] |
 
 **Read the third column, not the second.** The absolute £ figure is ~94% stock written off at
 its recorded best-before, and that comes from the **replenishment rule, not from any decision
@@ -336,7 +342,7 @@ cost its decisions genuinely cause, and a test keeps the distinction honest.
 
 Two results worth reading carefully:
 
-- **Escalating everything is not safe.** It ships 783 expired units against the agent's 285,
+- **Escalating everything is not safe.** It ships 783 expired units against the agent's 281,
   because a 1% human error rate applied to *every* return beats a larger rate applied only to
   the hard ones. Had review been modelled as a free correct answer, this policy would have been
   unbeatable and the comparison rigged.
@@ -361,7 +367,7 @@ there.
 
 ## 4. Testing
 
-693 tests. The important distinction is between the two kinds:
+709 tests. The important distinction is between the two kinds:
 
 | | recorded cases | generated cases |
 |---|---|---|
