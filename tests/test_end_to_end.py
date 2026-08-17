@@ -730,3 +730,37 @@ def test_a_print_date_never_favours_the_batch_nobody_named():
     )
     assert nothing_matches["other"] == pytest.approx(P_DATE_MATCHES)
     assert nothing_matches["other"] > nothing_matches[best]
+
+
+# ------------------------------------------------------- the instructions
+
+
+def test_every_command_the_readme_gives_actually_exists():
+    """Instructions rot faster than code. These are checked, not trusted."""
+    import importlib
+    import re
+
+    readme = (Path(__file__).resolve().parent.parent / "README.md").read_text()
+    modules = set(re.findall(r"uv run python -m ([a-z_.]+)", readme))
+    assert modules, "the README should tell somebody how to run this"
+    for name in sorted(modules):
+        importlib.import_module(name)
+
+
+def test_the_single_case_runner_works_both_ways():
+    """`demo.run` is the answer to "how do I run the agent?", so it has to work."""
+    from demo import run as runner
+
+    recorded = panels.build("S4", COSTS, RELIABILITY)
+    generated = panels.build_generated(418, COSTS, RELIABILITY)
+    for screen in (recorded, generated):
+        runner.show(screen)  # must not raise on either kind of case
+        assert screen.frames
+
+
+def test_the_readme_names_the_only_command_that_needs_a_key():
+    """Everything else is offline, and somebody should be able to tell which is which."""
+    readme = (Path(__file__).resolve().parent.parent / "README.md").read_text()
+    assert "record_readings" in readme
+    section = readme[readme.index("## 8. Running it") :]
+    assert "NEEDS AN API KEY" in section

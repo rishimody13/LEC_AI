@@ -1,17 +1,108 @@
 # RECONCILE — deciding what a returned carton actually is
 
-**Repo:** `LEC_AI` · **Brief:** [objectives.md](./objectives.md) · **Plan:** [PLAN.md](./PLAN.md)
-· **Progress:** [status.md](./status.md) · **Demo guide:** [demo/GUIDE.md](./demo/GUIDE.md) · **Video script:** [demo/SCRIPT.md](./demo/SCRIPT.md)
-· **Design options:** [architecture-options.md](./architecture-options.md)
+**Repo:** `LEC_AI` · **Brief:** [objectives.md](./objectives.md) · **Initial plan:** [PLAN.md](./PLAN.md)
+· **Progress:** [status.md](./status.md) · **Demo guide:** [demo/GUIDE.md](./demo/GUIDE.md)
+· **Design option discussion and decision:** [architecture-options.md](./architecture-options.md)
 · **Where the model is used:** [llm-integration.md](./llm-integration.md)
 
 ```bash
 uv sync --extra dev --extra demo
-uv run pytest                              # 709 tests
-uv run streamlit run demo/app.py           # the screen
-uv run python -m harness.sweep 2000        # the agent against cases nobody wrote
-uv run python -m harness.counterfactual 600  # the harm, measured
+uv run python -m demo.run S4               # the agent on the hero case, in the terminal
+uv run streamlit run demo/app.py           # the same thing, with pictures
+uv run pytest                              # 712 tests
 ```
+
+Everything runs offline. Nothing needs an API key. 
+
+## 0. Running it
+
+Nothing here needs a network or an API key. The one command that does is marked.
+
+### Install
+
+```bash
+uv sync --extra dev --extra demo      # dev = tests and linting, demo = the screen
+```
+
+`--extra demo` is only needed for the Streamlit page; everything else works without it. There
+is also `--extra llm`, needed only to re-record the model readings.
+
+### Run the agent on one return
+
+```bash
+uv run python -m demo.run S4              # the hero case
+uv run python -m demo.run --list          # the twelve recorded cases
+uv run python -m demo.run --seed 418      # a case generated on the spot
+uv run python -m demo.run --seed 7 --miscalibrated
+```
+
+Prints the label reading, the belief after each piece of evidence with what it would do at
+that point, both decisions with every option priced, and the outcome against the truth. This
+is the quickest way to see what the agent actually did.
+
+### The demo screen
+
+```bash
+uv run streamlit run demo/app.py
+```
+
+Opens on S4. Tick **"step through the evidence"** to replay a case one source at a time.
+Reading guide: **[demo/GUIDE.md](./demo/GUIDE.md)**.
+
+### Show there is no default branch
+
+```bash
+uv run python -m demo.flip
+```
+
+Runs the same case three times, changing one cost figure. The chosen action changes with it.
+
+### The agent against cases nobody wrote
+
+```bash
+uv run python -m harness.sweep 2000                  # world matches the reliability model
+uv run python -m harness.sweep 2000 --miscalibrated  # it does not
+```
+
+Builds fresh worlds from seeds, checks properties rather than expected answers, and prints any
+breach with the seed that caused it so it reproduces alone. Takes about a minute for 2,000.
+
+### Is it as sure as it should be?
+
+```bash
+uv run python -m harness.calibration          # stated confidence vs how often it is right
+uv run python -m harness.calibration --sweep  # the evidence weight against realised cost
+```
+
+### The harm, measured
+
+```bash
+uv run python -m harness.counterfactual 600
+```
+
+Six policies through the same 540 days on 600 seeds, paired, with bootstrapped intervals.
+Takes several minutes. The committed results are in `artifacts/harm.json`.
+
+### Tests and checks
+
+```bash
+uv run pytest                    # 712 tests, about four minutes
+uv run pytest tests/test_sweep.py -q          # just the generated-case gate
+uv run pytest tests/test_harm_is_real.py -q   # just the R8 proof
+uv run ruff check . && uv run ruff format --check .
+uv run mypy
+```
+
+### Regenerating what is committed
+
+```bash
+uv run python -m services.record_traces    # artifacts/traces/*.json, offline
+uv run python -m services.record_readings  # NEEDS AN API KEY AND NETWORK
+```
+
+`record_readings` is the only command that calls a model. It re-reads the eight label images
+and eight notes and rewrites `tests/cassettes/`. You only need it if you change an image or a
+note; everything else replays the recordings.
 
 ---
 
@@ -55,7 +146,7 @@ and compared, and the cheapest wins.
 | R6 | Trust, pay to check, or escalate | All four actions win somewhere |
 | R7 | Assign stock without causing drift | `ledger/` — append-only, reversible, drift measured against truth |
 | R8 | Prove the harm, measured | 600 paired 540-day simulations: **25% fewer expired units** than trusting the label |
-| R9 | Working code | 709 tests, ruff and mypy strict clean, runs offline |
+| R9 | Working code | 712 tests, ruff and mypy strict clean, runs offline |
 | R10 | A case where the obvious answer is wrong | S4, and the demo says so on screen |
 
 ---
@@ -367,7 +458,7 @@ there.
 
 ## 4. Testing
 
-709 tests. The important distinction is between the two kinds:
+712 tests. The important distinction is between the two kinds:
 
 | | recorded cases | generated cases |
 |---|---|---|
@@ -527,7 +618,49 @@ prove nothing.
 
 ---
 
-## 8. Layout
+## 9. With more time
+
+In the order I would actually do them.
+
+**Fix the calibration properly.** The agent is overconfident by about a factor of two, and the
+single evidence weight improves its *decisions* without fixing that. The real fix is a model of
+*which* sources share *what* information — a reused box, a stale replica and a repacking
+customer are not independent symptoms, they are three views of one underlying state. That is a
+joint likelihood rather than a scalar, and it is the change most likely to move every number
+here.
+
+**Learn the reliability figures instead of setting them.** They sit in `config/reliability.yaml`
+as Dirichlet counts precisely so they *could* be updated as returns resolve, and nothing does
+it. Every escalation is a labelled example arriving for free. This would also remove the
+biggest stated caveat in the whole project.
+
+**Make the replenishment realistic.** The simulation reorders to a fixed level with no
+forecasting, which writes off about a tenth of everything received. It is identical across
+policies so the comparison holds, but it swamps the absolute figures and forces every result to
+be quoted above a floor. A demand forecast would make the pound numbers mean something on their
+own.
+
+**Weight the tail.** The agent is risk-neutral: a certain £4,000 loss and a one-in-a-hundred
+chance of £400,000 are the same to it. No food business would agree. This is a small change to
+the same arithmetic and I would want it before anyone acted on the output.
+
+**Widen the perception evidence.** Eight recorded label readings and eight notes, only one of
+which contains a lot code. The *use* of an extracted code is measured across hundreds of
+generated cases; the extraction itself is not. More images, more notes, and a second reader
+that fails differently would let the reliability model earn its buckets.
+
+**Let a return split across batches.** Real partial returns often contain two. The whole design
+assumes one answer per return, and relaxing that changes the candidate space rather than the
+plumbing — which is why it was cut, and why it is a real limitation rather than an oversight.
+
+**Handle evidence nobody anticipated.** A delivery-note photo or a temperature log has no
+likelihood function, so it has no effect at all. A model-driven agent would at least use it.
+The deliberate trade was a testable design over a more capable untested one; with more time I
+would want a way to take a new source without rebuilding the belief.
+
+---
+
+## 10. Layout
 
 ```
 world/       ground truth: warehouse, batches, label images   (agent/ must not import)

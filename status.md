@@ -24,7 +24,7 @@ P7 demo screen  [####################] done
 P8 video        [                    ] next
 ```
 
-**Current state:** 709 tests pass, ruff clean, mypy strict clean. Everything runs offline.
+**Current state:** 712 tests pass, ruff clean, mypy strict clean. Everything runs offline.
 
 Building the ledger found four real faults, all of them in the direction that ships expired
 stock. They are written up under "what the ledger found" below, each with a named regression
@@ -82,7 +82,7 @@ decision produced, so the trace and the stock record are the same document.
 |---|---:|---|
 | `test_generalises.py` | 203 | Properties across 1-400 units on the hand-written cases |
 | `test_harm_is_real.py` | 14 | The R8 proof: policies compared over 18 months, with intervals |
-| `test_end_to_end.py` | 135 | Image to shelf, the demo screen, and uncertainty probed hard |
+| `test_end_to_end.py` | 138 | Image to shelf, the demo screen, and uncertainty probed hard |
 | `test_simulation.py` | 26 | The simulator itself: picking rules, truth tracking, scoring |
 | `test_ledger.py` | 109 | The stock record: append-only, conserved, reversible, and its drift |
 | `test_sweep.py` | 49 | The agent against generated cases nobody wrote |
@@ -99,7 +99,7 @@ decision produced, so the trace and the stock record are the same document.
 | `test_wms_client.py` | 8 | Each warehouse fault leaves the right symptom |
 | `test_coding.py` | 5 | Check digits, including the exhaustive single-digit proof |
 | `test_isolation.py` | 4 | Neither `agent/` nor `ledger/` can import ground truth |
-| **Total** | **709** | |
+| **Total** | **712** | |
 
 ---
 
@@ -1225,7 +1225,13 @@ whether a batch was identified correctly.
 
 ### P7 — Demo screen
 
-**New files:** `demo/panels.py`, `demo/app.py`, `tests/test_end_to_end.py`.
+**New files:** `demo/panels.py`, `demo/app.py`, `demo/run.py`, `demo/flip.py`,
+`tests/test_end_to_end.py`.
+
+`demo/run.py` is the answer to "how do I run the agent?" — one case, the belief after each
+piece of evidence, both decisions priced, and the outcome against the truth, in a terminal with
+no extra dependencies. It was missing: every entry point ran *all* twelve cases or a whole
+sweep, and there was no way to look at one.
 
     uv run streamlit run demo/app.py
 

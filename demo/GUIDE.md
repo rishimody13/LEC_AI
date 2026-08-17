@@ -8,6 +8,9 @@ uv sync --extra demo
 uv run streamlit run demo/app.py
 ```
 
+No browser? `uv run python -m demo.run S4` prints the same walkthrough in a terminal, with no
+extra dependencies.
+
 It opens on **S4**, the case the whole project is about. Everything runs offline: no network,
 no model call, no API key. Building all twelve cases takes well under a second.
 
