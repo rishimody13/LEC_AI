@@ -24,7 +24,7 @@ P7 demo screen  [####################] done
 P8 video        [                    ] next
 ```
 
-**Current state:** 690 tests pass, ruff clean, mypy strict clean. Everything runs offline.
+**Current state:** 693 tests pass, ruff clean, mypy strict clean. Everything runs offline.
 
 Building the ledger found four real faults, all of them in the direction that ships expired
 stock. They are written up under "what the ledger found" below, each with a named regression
@@ -82,7 +82,7 @@ decision produced, so the trace and the stock record are the same document.
 |---|---:|---|
 | `test_generalises.py` | 203 | Properties across 1-400 units on the hand-written cases |
 | `test_harm_is_real.py` | 14 | The R8 proof: policies compared over 18 months, with intervals |
-| `test_end_to_end.py` | 116 | Image to shelf, the demo screen, and uncertainty probed hard |
+| `test_end_to_end.py` | 119 | Image to shelf, the demo screen, and uncertainty probed hard |
 | `test_simulation.py` | 26 | The simulator itself: picking rules, truth tracking, scoring |
 | `test_ledger.py` | 109 | The stock record: append-only, conserved, reversible, and its drift |
 | `test_sweep.py` | 49 | The agent against generated cases nobody wrote |
@@ -99,7 +99,7 @@ decision produced, so the trace and the stock record are the same document.
 | `test_wms_client.py` | 8 | Each warehouse fault leaves the right symptom |
 | `test_coding.py` | 5 | Check digits, including the exhaustive single-digit proof |
 | `test_isolation.py` | 4 | Neither `agent/` nor `ledger/` can import ground truth |
-| **Total** | **690** | |
+| **Total** | **693** | |
 
 ---
 
@@ -957,6 +957,22 @@ units** per run.
 candidate appears, and that an invented code is rejected. All of them passed throughout. None
 of them asked whether it *changed a decision*. There are now two that do, one on S7 and one
 across 600 generated cases, and they fail if the contribution goes inert again.
+
+### A return of nothing, or less
+
+Probing edge cases while writing the README turned up an input the agent accepted silently and
+should not have. `ReturnIntake.quantity` was an unconstrained `int`, and a **negative quantity
+flips the sign of every harm term** — so the arg-min picks the *most* damaging action and
+reports it as the cheapest. At −5 units the hero case filed the stock as the label claimed,
+which is the exact answer the whole project exists to reject.
+
+Now refused at the intake boundary rather than at the ledger. The ledger already rejected a
+non-positive quantity, but by the time it sees one the decision has been made and logged, so
+the check belongs earlier. Zero is refused too: a return of nothing is not a return.
+
+Nothing else in the repo ever produced one, which is why it survived — every generator, every
+scenario and every test used positive quantities. It is the kind of hole that only opens when
+something upstream misbehaves, which is exactly when it would matter.
 
 ### Is the agent operating at the optimum?
 

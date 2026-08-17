@@ -61,7 +61,11 @@ class ReturnIntake(BaseModel):
     return_id: str
     customer_id: str
     sku_id: str
-    quantity: int
+    #: Must be positive. A negative quantity flips the sign of every harm term,
+    #: so the cheapest action becomes the most damaging one and the agent
+    #: confidently picks it. Rejected here rather than at the ledger, because by
+    #: then the decision has already been made.
+    quantity: int = Field(gt=0)
     arrived: date
     condition_note: str = ""
     image_path: str | None = None

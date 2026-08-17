@@ -7,7 +7,7 @@
 
 ```bash
 uv sync --extra dev --extra demo
-uv run pytest                              # 690 tests
+uv run pytest                              # 693 tests
 uv run streamlit run demo/app.py           # the screen
 uv run python -m harness.sweep 2000        # the agent against cases nobody wrote
 uv run python -m harness.counterfactual 600  # the harm, measured
@@ -55,7 +55,7 @@ and compared, and the cheapest wins.
 | R6 | Trust, pay to check, or escalate | All four actions win somewhere |
 | R7 | Assign stock without causing drift | `ledger/` — append-only, reversible, drift measured against truth |
 | R8 | Prove the harm, measured | 600 paired 540-day simulations: **24% fewer expired units** than trusting the label |
-| R9 | Working code | 690 tests, ruff and mypy strict clean, runs offline |
+| R9 | Working code | 693 tests, ruff and mypy strict clean, runs offline |
 | R10 | A case where the obvious answer is wrong | S4, and the demo says so on screen |
 
 ---
@@ -361,7 +361,7 @@ there.
 
 ## 4. Testing
 
-690 tests. The important distinction is between the two kinds:
+693 tests. The important distinction is between the two kinds:
 
 | | recorded cases | generated cases |
 |---|---|---|
@@ -408,7 +408,120 @@ uv run python -m harness.calibration --sweep        # the evidence weight, measu
 
 ---
 
-## 6. Layout
+## 6. Edge cases, and what happens
+
+Everything below is exercised by a test. Most of them were found the hard way — by the
+generative sweep, or by probing — rather than anticipated.
+
+### The evidence is missing or broken
+
+| Case | What happens |
+|---|---|
+| **Label unreadable** — water damage, heavy glare | No code, so the label likelihood is flat across candidates. It contributes nothing rather than contributing noise |
+| **Label reader itself is down** | Same, but the failure is recorded as a symptom so the reliability model knows which bucket applies |
+| **Check digit fails** | The characters do not add up, so *something* was misread. The confusion table decides which real codes could have garbled into what was read |
+| **Code is incomplete** — torn corner | The fragment is used as a prefix: every known batch whose code starts with it becomes a candidate. Without this the true answer would often never be on the list |
+| **Label names a code that is not a real batch** | Recorded as `rejected` and its weight goes to the catch-all. An invented or misread code cannot win |
+| **Warehouse records time out** | No records *and no batch list*. The agent still has the label, and a legible code becomes an unverified candidate rather than being thrown away |
+| **Records are stale** — replica behind | Recent shipments are missing by definition, so the chance the answer is not on the list rises. Ignoring this once had the agent file an impostor at 99.96% |
+| **Records contradict themselves** | Treated as a corrupted-source symptom, which is a different reliability bucket from a slow one |
+| **A paid lookup is unavailable** | Priced as buying nothing. The agent does not pay for a source that cannot answer |
+| **No evidence at all survives** | The candidate list is just the catch-all, at 100%. It still weighs five options and holds the stock (£5.12) rather than escalating (£29.50). With no batch list there is no date it can stand behind, so the hold is left *undated* — which means it cannot be picked at all, and carries no expiry risk. Being ignorant safely |
+
+### The stock is not what the paperwork implies
+
+| Case | What happens |
+|---|---|
+| **A reused outer box** — the label is genuine but on the wrong contents | This is the hero case. "Wrong label" is one of three states the label channel can be in, so a perfectly legible code can still be disbelieved |
+| **The customer repacks** | Their labels are wrong far more often, *and* "you cannot return more than we sent you" stops being a rule — they merge stock across deliveries. Applying it anyway ruled out the true batch precisely for the customers who make cases hard |
+| **Cross-docked or transferred stock** | Never appears in our shipment records at all. The record-completeness rules are switched off, and the catch-all's share of the prior rises |
+| **The answer appears only in prose** | A note saying *"inner cases stamped B-2296"* is invisible to a `SELECT`. The model reads it out, code checks the batch is real, and it becomes a candidate with evidence behind it |
+| **A batch that could not have been in that shipment** | Cleared quality control after the lorry left, or was never allocated to that customer. Ruled out — but never to exactly zero, because the registry can be wrong too |
+
+### Degenerate inputs
+
+| Case | What happens |
+|---|---|
+| **Quantity of zero or less** | Refused at the intake boundary. A negative quantity flips the sign of every harm term, so the *most* damaging action becomes the cheapest and the agent picks it confidently. At −5 units the hero case filed the stock as the label claimed |
+| **One unit** | Decided normally, and it will sometimes file the wrong batch — an £8.53 review is not worth spending on a single £11.40 unit. It still never records an expiry *later* than the truth |
+| **Thousands of units** | Also decided normally. Above roughly a hundred units on the hero case it stops paying for lookups, because the risk left over after one still exceeds what a person costs |
+| **A note naming a batch that does not exist** | Rejected, weight to the catch-all. Same treatment as an invented label code |
+| **Evidence that explains nothing** — every candidate near zero | Fifty rounds of it leaves a valid distribution. Arithmetic is in log space with a floor, so nothing underflows to `nan` |
+| **The batch list is empty** | Treated as *no information*, not as "no batch matches". Reading an empty list as a rejection suppressed the reused-box explanation fiftyfold and left the agent 99.996% sure of a single unverified reading |
+
+### Stock record and simulation
+
+| Case | What happens |
+|---|---|
+| **A decision that turns out wrong** | The row stays in the log and a new one puts the stock back. History is never rewritten; `UPDATE` and `DELETE` are blocked by database triggers |
+| **Stock held with no expiry date** | Cannot be picked at all — first-expired-first-out cannot rank what it cannot date — so it carries no expiry risk. The picker really does skip it, and a test says so |
+| **Two returns held at the same position** | They pool. A pick is split across what is really there in proportion, not in name order, which would quietly ship one batch before another |
+| **A hold written off before anyone reviews it** | Handled rather than crashing. It is a real cost of dating stock conservatively, and it is why holding everything is expensive |
+| **An escalation** | Still posted to the ledger. Stock a person is looking at is real stock in a real place, and a person resolves it after three days — right 99% of the time, not always |
+
+---
+
+## 7. Key design decisions
+
+**Keep a distribution, not a best guess.** The agent's output is a probability for every
+candidate that sums to one, including a catch-all for "something nobody listed". A single best
+guess cannot express "the label is legible and I still do not believe it", which is the entire
+problem.
+
+**Every action is priced; the cheapest wins.** There is no `else` branch. Escalating to a human
+sits in the same costed list as committing, and wins when it is genuinely cheapest. Editing
+`config/harm.yaml` flips the chosen action on identical evidence, which is how the absence of a
+hardcoded fallback is proved rather than asserted.
+
+**Source failure is inside the likelihood, not a filter in front of it.** The agent marginalises
+over what each source might be doing rather than deciding first whether to trust it. That is
+what lets a perfectly legible label be disbelieved.
+
+**The model perceives; code decides — enforced by the type, not by discipline.** `LabelReading`
+and `NoteFacts` have no field in which a judgement could be expressed. There is nowhere for the
+model to name a batch or an action, so even a drifting prompt could not carry the answer.
+
+**No model call at runtime.** Readings are recorded once, keyed by content hash, and replayed.
+The demo runs offline with no key, results are reproducible, and a test replaces
+`anthropic.Anthropic` with a class that raises to prove it. The cost is that a re-record is
+needed whenever an image changes — deliberate, because a demo that depends on a network call is
+a demo that fails while being filmed.
+
+**Ground truth is walled off, and the wall is tested.** Neither `agent/` nor `ledger/` can
+import `world/`. Without this every harm number would be unfalsifiable.
+
+**Nothing is ever driven to exactly zero.** Nothing recovers from zero, and the sources that
+rule candidates out can themselves be wrong. A broken constraint collapses a candidate to the
+chance that source is mistaken, not to nothing.
+
+**Stock movements are transfers, not adjustments**, with places outside the warehouse named
+explicitly. "Units in equals units out" is then true by construction rather than by convention.
+
+**Costs are derived from a basis, not typed in.** `config/harm.yaml` holds unit cost, margin,
+wage and minutes; `agent/harm.py` derives every figure from them, so changing a wage updates
+everything downstream and cannot leave two numbers disagreeing.
+
+**Report break-even, not a sensitivity sweep.** Expected cost is linear in each cost parameter,
+so the exact value at which a decision flips can be solved for directly. That is more useful
+than sampling around a guess, and it is what the demo's sensitivity table shows.
+
+**Test properties on cases nobody wrote.** Every bug in this project hid behind hand-written
+cases added once the code could already handle them. The generative harness asserts what must
+never happen, in a world calibrated to the agent's beliefs and one deliberately not.
+
+**Discount evidence for not being independent.** Multiplying likelihoods assumes the sources
+are independent given the batch, and they are not — a reused box carries a genuine label of a
+batch that genuinely went to that customer. Constraints are exempt, because they do not
+corroborate anything and already state their own error rate.
+
+**Prove the harm with a paired comparison against real rivals.** Same warehouse, same demand,
+same returns for every policy, over eighteen months, with bootstrapped intervals. "Trust the
+label" is what warehouses actually do and is right most of the time; beating a straw man would
+prove nothing.
+
+---
+
+## 8. Layout
 
 ```
 world/       ground truth: warehouse, batches, label images   (agent/ must not import)

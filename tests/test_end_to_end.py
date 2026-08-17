@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import copy
 import math
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -583,3 +584,29 @@ def test_a_lookup_fee_is_the_fee_and_not_the_whole_cost():
 
     terminal = [o for d in screen.decisions for o in d.options if not o.action.startswith("gather")]
     assert all(o.fee_gbp == 0.0 for o in terminal), "only a lookup costs anything to take"
+
+
+@pytest.mark.parametrize("quantity", [0, -1, -84])
+def test_a_return_of_nothing_or_less_is_refused(quantity):
+    """A negative quantity flips the sign of every harm term.
+
+    The cheapest action then becomes the most damaging one, and the agent picks
+    it confidently. Found by probing edge cases: at −5 units the hero case filed
+    the stock as the batch the label claimed — the answer the whole project
+    exists to reject — because the arithmetic had been turned upside down.
+
+    Rejected at the intake boundary rather than at the ledger, because by the
+    time the ledger sees it the decision has already been made.
+    """
+    from pydantic import ValidationError
+
+    from agent.evidence import ReturnIntake
+
+    with pytest.raises(ValidationError):
+        ReturnIntake(
+            return_id="RET-X",
+            customer_id="CUST-118",
+            sku_id="SKU-4471",
+            quantity=quantity,
+            arrived=date(2026, 8, 15),
+        )
