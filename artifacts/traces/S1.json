@@ -62,9 +62,10 @@
         },
         {
           "action": "escalate",
-          "expected_cost_gbp": 18.13,
+          "expected_cost_gbp": 18.52,
           "exposure": {
             "human_review": 1.0,
+            "misattribution_unit": 0.4,
             "expired_unit": 0.2
           },
           "fee_gbp": 0.0
@@ -112,9 +113,10 @@
         },
         {
           "action": "escalate",
-          "expected_cost_gbp": 18.13,
+          "expected_cost_gbp": 18.52,
           "exposure": {
             "human_review": 1.0,
+            "misattribution_unit": 0.4,
             "expired_unit": 0.2
           },
           "fee_gbp": 0.0
@@ -133,8 +135,8 @@
         }
       ],
       "chosen": "commit B-2293 -> C-04-03",
-      "margin_gbp": 18.11,
-      "margin_share": 645.3515,
+      "margin_gbp": 18.49,
+      "margin_share": 659.0389,
       "fragile": false,
       "sensitivity": []
     }

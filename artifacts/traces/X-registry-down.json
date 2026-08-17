@@ -51,30 +51,31 @@
       "options": [
         {
           "action": "escalate",
-          "expected_cost_gbp": 28.69,
+          "expected_cost_gbp": 29.5,
           "exposure": {
             "human_review": 1.0,
+            "misattribution_unit": 0.84,
             "expired_unit": 0.42
           },
           "fee_gbp": 0.0
         },
         {
           "action": "gather batch_registry",
-          "expected_cost_gbp": 28.99,
+          "expected_cost_gbp": 29.8,
           "exposure": {},
-          "fee_gbp": 28.99
+          "fee_gbp": 29.8
         },
         {
           "action": "gather shipment_ledger",
-          "expected_cost_gbp": 29.09,
+          "expected_cost_gbp": 29.9,
           "exposure": {},
-          "fee_gbp": 29.09
+          "fee_gbp": 29.9
         },
         {
           "action": "gather batch_registry+shipment_ledger",
-          "expected_cost_gbp": 29.39,
+          "expected_cost_gbp": 30.2,
           "exposure": {},
-          "fee_gbp": 29.39
+          "fee_gbp": 30.2
         },
         {
           "action": "segregate -> H-01-01",
@@ -122,7 +123,7 @@
       ],
       "chosen": "escalate",
       "margin_gbp": 0.3,
-      "margin_share": 0.0105,
+      "margin_share": 0.0102,
       "fragile": true,
       "sensitivity": [
         {
@@ -136,6 +137,12 @@
           "now_gbp": 8.53,
           "flips_at_gbp": 8.83,
           "slack_x": 1.0
+        },
+        {
+          "parameter": "misattribution_unit",
+          "now_gbp": 0.96,
+          "flips_at_gbp": 1.32,
+          "slack_x": 1.4
         }
       ]
     }

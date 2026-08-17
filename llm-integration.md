@@ -53,9 +53,30 @@ The three things the model contributes that a database query cannot:
 3. Recognising that a note describes a cross-dock or a mixed pallet, which tells the agent
    the shipment records are not going to cover this stock.
 
+**Point 2 was dead weight until it was measured, twice over.** The model extracted the code and
+`agent/candidates.py` turned it into a candidate, but nothing treated that code as *evidence*
+for the batch it named — `note_likelihood` only ever looked at print dates — and the one
+function that might have was gated behind a paid lookup, which S7 never buys. The candidate
+appeared, carried no support, and changed no decision on any of the twelve cases or on any of
+32 generated cases that had a lot code in the note.
+
+It is now split into `note_code_likelihood`, applied immediately alongside the records and the
+label, and `note_date_likelihood`, which still waits for the registry. On S7 the true batch,
+named nowhere but in prose, goes from 0.20 to **0.78**. Across generated cases the extraction
+now changes 13 of 32 outcomes and gets 10 right that would otherwise be wrong.
+
+The lesson is about testing rather than about the model. There were already tests that the code
+path ran, that the candidate appeared, and that an invented code was rejected. All passed the
+whole time. None asked whether it changed a decision.
+
 Anything the model proposes is checked before use. A batch code found in prose only becomes
 a candidate if it matches a batch that actually exists; otherwise it is recorded as rejected
 and its weight goes to the catch-all. An invented code cannot win.
+
+Note that `agent/candidates.py` contains **no model call at all** — it consumes the `NoteFacts`
+the reader produced. That is exactly the split working as intended, but it has a consequence
+worth stating: you cannot tell from reading `candidates.py` whether the model is contributing
+anything. It has to be measured end to end, and when it was not, it was not contributing.
 
 ## 3. How it runs offline
 
@@ -132,8 +153,10 @@ reasoning across thousands of cases, not the model's ability to read a label.**
 - **The recordings were produced by a vision model reading the rendered images**, and they are
   a fixed snapshot. If the live model would read an image differently today, the recordings do
   not know that. Re-recording is a one-command job but it needs a key.
-- **The note reader is only exercised on 8 notes.** Its schema is checked by the generative
-  sweep, but the extraction quality itself is not.
+- **The note reader is only exercised on 8 notes**, and only one of them contains a lot code.
+  The *use* of an extracted code is now measured across hundreds of generated cases, but the
+  *extraction* itself — whether the model finds a code that is really there, and refrains from
+  inventing one that is not — rests on those 8 recordings.
 - **A model that reads a label wrongly and confidently is not detectable here.** The check
   digit catches most corruptions, and the reliability model prices the rest, but a confident
   misread that happens to produce a valid code would pass through. That is the same failure the

@@ -139,6 +139,14 @@ def run(
         "carton label",
         belief_mod.label_likelihood(label, candidate_set, reliability, known_codes),
     )
+    # A lot code written out in the note needs nothing bought, so it is applied
+    # here with everything else. Only the print date has to wait for the registry.
+    b = belief_mod.update(
+        b,
+        "note",
+        "lot code written in the note",
+        notes.note_code_likelihood(note_facts, candidate_set),
+    )
 
     # ------------------------------------------------- decision 1: who to believe
     registry: RegistryEvidence | None = None
@@ -174,7 +182,10 @@ def run(
             belief_mod.dispatch_likelihood(reg, led, candidate_set, intake, off_record),
         )
         trial = belief_mod.update(
-            trial, "note", "condition note", notes.note_likelihood(note_facts, candidate_set, reg)
+            trial,
+            "note dates",
+            "print date on the goods",
+            notes.note_date_likelihood(note_facts, candidate_set, reg),
         )
         return [(1.0, trial)]
 
@@ -216,7 +227,10 @@ def run(
         )
 
         b = belief_mod.update(
-            b, "note", "condition note", notes.note_likelihood(note_facts, candidate_set, registry)
+            b,
+            "note dates",
+            "print date on the goods",
+            notes.note_date_likelihood(note_facts, candidate_set, registry),
         )
 
     elif stance.chosen.action.kind is Kind.ESCALATE:

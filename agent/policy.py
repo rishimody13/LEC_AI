@@ -322,9 +322,21 @@ def escalate_cost(costs: CostModel, quantity: int) -> LinearCost:
     person who investigates is good but not perfect, and leaving that out makes
     escalation look free - the agent then hands over everything rather than
     deciding anything.
+
+    The harm they cause is priced the same way as the agent's own. A batch filed
+    under the wrong number breaks traceability whoever filed it, so the
+    misattribution charge applies here too. Leaving it off - which it was -
+    made the identical mistake cheaper when a person made it, and quietly tilted
+    every close call towards handing the work over.
     """
-    slip = costs.human_error_rate * quantity * UNKNOWN_BATCH_OVERSTATE
-    return LinearCost(exposure={HUMAN_REVIEW: 1.0, EXPIRED_UNIT: slip})
+    wrong = costs.human_error_rate * quantity
+    return LinearCost(
+        exposure={
+            HUMAN_REVIEW: 1.0,
+            MISATTRIBUTION_UNIT: wrong,
+            EXPIRED_UNIT: wrong * UNKNOWN_BATCH_OVERSTATE,
+        }
+    )
 
 
 def terminal_actions(belief: Belief, quantity: int, costs: CostModel, today: date) -> list[Priced]:

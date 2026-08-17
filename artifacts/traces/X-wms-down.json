@@ -61,9 +61,10 @@
         },
         {
           "action": "escalate",
-          "expected_cost_gbp": 18.13,
+          "expected_cost_gbp": 18.52,
           "exposure": {
             "human_review": 1.0,
+            "misattribution_unit": 0.4,
             "expired_unit": 0.2
           },
           "fee_gbp": 0.0
@@ -106,30 +107,25 @@
         },
         {
           "action": "escalate",
-          "expected_cost_gbp": 18.13,
+          "expected_cost_gbp": 18.52,
           "exposure": {
             "human_review": 1.0,
+            "misattribution_unit": 0.4,
             "expired_unit": 0.2
           },
           "fee_gbp": 0.0
         }
       ],
       "chosen": "segregate -> H-01-01",
-      "margin_gbp": 12.97,
-      "margin_share": 2.5139,
+      "margin_gbp": 13.36,
+      "margin_share": 2.5883,
       "fragile": false,
       "sensitivity": [
         {
           "parameter": "deferred_review",
           "now_gbp": 5.12,
-          "flips_at_gbp": 18.09,
-          "slack_x": 3.5
-        },
-        {
-          "parameter": "misattribution_unit",
-          "now_gbp": 0.96,
-          "flips_at_gbp": 308.28,
-          "slack_x": 321.1
+          "flips_at_gbp": 18.48,
+          "slack_x": 3.6
         }
       ]
     }

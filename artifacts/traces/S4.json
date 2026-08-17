@@ -73,18 +73,19 @@
         },
         {
           "action": "escalate",
-          "expected_cost_gbp": 28.69,
+          "expected_cost_gbp": 29.5,
           "exposure": {
             "human_review": 1.0,
+            "misattribution_unit": 0.84,
             "expired_unit": 0.42
           },
           "fee_gbp": 0.0
         },
         {
           "action": "gather shipment_ledger",
-          "expected_cost_gbp": 29.09,
+          "expected_cost_gbp": 29.9,
           "exposure": {},
-          "fee_gbp": 29.09
+          "fee_gbp": 29.9
         },
         {
           "action": "segregate -> H-01-01",
@@ -158,9 +159,10 @@
         },
         {
           "action": "escalate",
-          "expected_cost_gbp": 28.69,
+          "expected_cost_gbp": 29.5,
           "exposure": {
             "human_review": 1.0,
+            "misattribution_unit": 0.84,
             "expired_unit": 0.42
           },
           "fee_gbp": 0.0
@@ -199,27 +201,27 @@
         }
       ],
       "chosen": "commit B-2288 -> A-07-02",
-      "margin_gbp": 0.88,
-      "margin_share": 0.0316,
-      "fragile": true,
+      "margin_gbp": 1.69,
+      "margin_share": 0.0606,
+      "fragile": false,
       "sensitivity": [
         {
           "parameter": "misattribution_unit",
           "now_gbp": 0.96,
-          "flips_at_gbp": 1.03,
+          "flips_at_gbp": 1.09,
           "slack_x": 1.1
         },
         {
           "parameter": "expired_unit",
           "now_gbp": 48.0,
-          "flips_at_gbp": 43.49,
-          "slack_x": 1.1
+          "flips_at_gbp": 39.35,
+          "slack_x": 1.2
         },
         {
           "parameter": "human_review",
           "now_gbp": 8.53,
-          "flips_at_gbp": 7.65,
-          "slack_x": 1.1
+          "flips_at_gbp": 6.85,
+          "slack_x": 1.2
         }
       ]
     }
@@ -228,8 +230,7 @@
   "outcome": "commit B-2288 -> A-07-02",
   "notes": [
     "who to believe: no single cost figure can be moved to a sensible value that would change this. The decision does not rest on the cost table.",
-    "who to believe: only \u00a30.58 (2.1%) ahead of 'escalate', which would lead somewhere different. A decision this close rests on a chosen parameter rather than on the evidence.",
-    "where it goes: only \u00a30.88 (3.2%) ahead of 'escalate', which would lead somewhere different. A decision this close rests on a chosen parameter rather than on the evidence."
+    "who to believe: only \u00a31.39 (4.9%) ahead of 'escalate', which would lead somewhere different. A decision this close rests on a chosen parameter rather than on the evidence."
   ],
   "stock_movements": [
     {

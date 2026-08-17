@@ -44,74 +44,75 @@
     {
       "name": "who to believe",
       "belief": {
-        "B-2293": 0.6546,
-        "B-2296": 0.2045,
-        "other": 0.1409
+        "B-2293": 0.1796,
+        "B-2296": 0.7817,
+        "other": 0.0387
       },
       "options": [
         {
           "action": "escalate",
-          "expected_cost_gbp": 21.01,
+          "expected_cost_gbp": 21.51,
           "exposure": {
             "human_review": 1.0,
+            "misattribution_unit": 0.52,
             "expired_unit": 0.26
           },
           "fee_gbp": 0.0
         },
         {
           "action": "gather batch_registry",
-          "expected_cost_gbp": 21.31,
+          "expected_cost_gbp": 21.81,
           "exposure": {},
-          "fee_gbp": 21.31
+          "fee_gbp": 21.81
         },
         {
           "action": "gather shipment_ledger",
-          "expected_cost_gbp": 21.41,
+          "expected_cost_gbp": 21.91,
           "exposure": {},
-          "fee_gbp": 21.41
+          "fee_gbp": 21.91
         },
         {
           "action": "gather batch_registry+shipment_ledger",
-          "expected_cost_gbp": 21.71,
+          "expected_cost_gbp": 22.21,
           "exposure": {},
-          "fee_gbp": 21.71
+          "fee_gbp": 22.21
         },
         {
-          "action": "commit B-2293 -> C-04-03",
-          "expected_cost_gbp": 186.45,
+          "action": "segregate -> H-01-01",
+          "expected_cost_gbp": 80.82,
           "exposure": {
-            "misattribution_unit": 10.634,
-            "wrong_zone": 0.205,
-            "expired_unit": 3.663
+            "shelf_waste_unit_day": 699.857,
+            "wrong_zone": 0.961,
+            "expired_unit": 1.005,
+            "deferred_review": 1.0,
+            "misattribution_unit": 11.352
           },
           "fee_gbp": 0.0
         },
         {
-          "action": "segregate -> H-01-01",
-          "expected_cost_gbp": 212.96,
+          "action": "commit B-2293 -> C-04-03",
+          "expected_cost_gbp": 88.94,
           "exposure": {
-            "shelf_waste_unit_day": 625.447,
-            "wrong_zone": 0.859,
-            "expired_unit": 3.663,
-            "deferred_review": 1.0,
-            "misattribution_unit": 17.96
+            "misattribution_unit": 40.648,
+            "wrong_zone": 0.782,
+            "expired_unit": 1.005
           },
           "fee_gbp": 0.0
         },
         {
           "action": "commit B-2296 -> A-07-08",
-          "expected_cost_gbp": 1843.82,
+          "expected_cost_gbp": 505.99,
           "exposure": {
-            "expired_unit": 37.703,
-            "misattribution_unit": 34.04,
-            "wrong_zone": 0.655
+            "expired_unit": 10.347,
+            "misattribution_unit": 9.341,
+            "wrong_zone": 0.18
           },
           "fee_gbp": 0.0
         }
       ],
       "chosen": "escalate",
       "margin_gbp": 0.3,
-      "margin_share": 0.0143,
+      "margin_share": 0.0139,
       "fragile": true,
       "sensitivity": [
         {
@@ -125,6 +126,12 @@
           "now_gbp": 8.53,
           "flips_at_gbp": 8.83,
           "slack_x": 1.0
+        },
+        {
+          "parameter": "misattribution_unit",
+          "now_gbp": 0.96,
+          "flips_at_gbp": 1.54,
+          "slack_x": 1.6
         }
       ]
     }

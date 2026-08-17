@@ -42,30 +42,31 @@
       "options": [
         {
           "action": "escalate",
-          "expected_cost_gbp": 15.73,
+          "expected_cost_gbp": 16.02,
           "exposure": {
             "human_review": 1.0,
+            "misattribution_unit": 0.3,
             "expired_unit": 0.15
           },
           "fee_gbp": 0.0
         },
         {
           "action": "gather batch_registry",
-          "expected_cost_gbp": 16.03,
+          "expected_cost_gbp": 16.32,
           "exposure": {},
-          "fee_gbp": 16.03
+          "fee_gbp": 16.32
         },
         {
           "action": "gather shipment_ledger",
-          "expected_cost_gbp": 16.13,
+          "expected_cost_gbp": 16.42,
           "exposure": {},
-          "fee_gbp": 16.13
+          "fee_gbp": 16.42
         },
         {
           "action": "gather batch_registry+shipment_ledger",
-          "expected_cost_gbp": 16.43,
+          "expected_cost_gbp": 16.72,
           "exposure": {},
-          "fee_gbp": 16.43
+          "fee_gbp": 16.72
         },
         {
           "action": "commit B-2290 -> A-07-05",
@@ -122,7 +123,7 @@
       ],
       "chosen": "escalate",
       "margin_gbp": 0.3,
-      "margin_share": 0.0191,
+      "margin_share": 0.0187,
       "fragile": true,
       "sensitivity": [
         {
@@ -136,6 +137,12 @@
           "now_gbp": 48.0,
           "flips_at_gbp": 50.0,
           "slack_x": 1.0
+        },
+        {
+          "parameter": "misattribution_unit",
+          "now_gbp": 0.96,
+          "flips_at_gbp": 1.96,
+          "slack_x": 2.0
         }
       ]
     }

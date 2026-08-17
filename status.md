@@ -4,12 +4,13 @@
 · **Agent design options:** [architecture-options.md](./architecture-options.md)
 · **Where the model is used:** [llm-integration.md](./llm-integration.md)
 
-Phases P0 to P6 are done. The agent works end to end on all twelve test cases: it reads the
+Phases P0 to P7 are done. The agent works end to end on all twelve test cases: it reads the
 evidence, works out probabilities, decides who to believe, decides where the stock goes, and
 writes that decision to an append-only stock ledger that can be traced back and undone.
 The harm is now measured rather than asserted: over 600 seeded runs of eighteen
-months each, the agent ships **22% fewer expired units** than trusting the label, and the
-confidence interval excludes zero. Next is the demo screen (P7).
+months each, the agent ships **24% fewer expired units** than trusting the label, and the
+confidence interval excludes zero. The demo screen is
+built and renders offline in well under a second. Next is filming (P8).
 
 ```
 P0 setup        [####################] done
@@ -19,11 +20,11 @@ P3 belief       [####################] done
 P4 decisions    [####################] done
 P5 ledger       [####################] done
 P6 simulation   [####################] done
-P7 demo screen  [                    ] next
-P8 video        [                    ]
+P7 demo screen  [####################] done
+P8 video        [                    ] next
 ```
 
-**Current state:** 572 tests pass, ruff clean, mypy strict clean. Everything runs offline.
+**Current state:** 687 tests pass, ruff clean, mypy strict clean. Everything runs offline.
 
 Building the ledger found four real faults, all of them in the direction that ships expired
 stock. They are written up under "what the ledger found" below, each with a named regression
@@ -81,6 +82,7 @@ decision produced, so the trace and the stock record are the same document.
 |---|---:|---|
 | `test_generalises.py` | 203 | Properties across 1-400 units on the hand-written cases |
 | `test_harm_is_real.py` | 12 | The R8 proof: policies compared over 18 months, with intervals |
+| `test_end_to_end.py` | 115 | Image to shelf, the demo screen, and uncertainty probed hard |
 | `test_simulation.py` | 26 | The simulator itself: picking rules, truth tracking, scoring |
 | `test_ledger.py` | 109 | The stock record: append-only, conserved, reversible, and its drift |
 | `test_sweep.py` | 49 | The agent against generated cases nobody wrote |
@@ -97,7 +99,7 @@ decision produced, so the trace and the stock record are the same document.
 | `test_wms_client.py` | 8 | Each warehouse fault leaves the right symptom |
 | `test_coding.py` | 5 | Check digits, including the exhaustive single-digit proof |
 | `test_isolation.py` | 4 | Neither `agent/` nor `ledger/` can import ground truth |
-| **Total** | **572** | |
+| **Total** | **687** | |
 
 ---
 
@@ -902,6 +904,60 @@ Two new gates also run on every build: held stock is never dated later than the 
 being right, so a miscalibrated world is no excuse), and dangerous drift must stay under 1% of
 wasteful drift.
 
+### The model's contribution was dead weight, twice
+
+Asked where the model is used in the agent and how "no runtime calls" squares with
+`candidates.py` containing no model integration, I measured it instead of restating the claim.
+The question was right and the answer was worse than expected.
+
+**Where the calls are.** Two, both `claude-sonnet-5`: `services/label_reader.py` reads the
+carton photo, `agent/notes.py` reads the condition note. Both are reached only by
+`services/record_readings.py`, an offline recorder. Everything else replays cassettes keyed by
+content hash, and a test replaces `anthropic.Anthropic` with a class that raises to prove it.
+That part of the claim held up.
+
+**`candidates.py` really does contain no model call, and that is the design** - the model
+perceives, code decides. It consumes `NoteFacts`, which the note reader produced. But that
+also means the contribution cannot be read off the code; it has to be measured end to end.
+When measured, it was not there.
+
+| | before | after |
+|---|---:|---:|
+| Hand-written cases whose outcome the extracted lot code changed | **0 of 12** | 0 of 12 |
+| Generated cases with a lot code in the note whose outcome it changed | **0 of 32** | **13 of 32** |
+| ...of those, cases it got *right* that would otherwise be wrong | **0** | **10** |
+| ...cases it got wrong | 0 | **0** |
+
+Two separate faults, one behind the other:
+
+1. **The extracted code was never used as evidence.** `note_likelihood` only ever looked at
+   `print_dates`. The model would read `B-2296` out of the prose, `candidates.build` would
+   verify it against the real batch list and add it as a candidate - and then nothing gave that
+   candidate any support. It arrived on the prior alone and was immediately penalised for being
+   absent from the shipment records. It could not win.
+2. **Even fixed, it was gated behind a paid lookup.** `note_likelihood` was only called inside
+   the gather branch, because print dates genuinely need the registry to be useful. A lot code
+   does not need anything bought. On S7 - the case built for this feature - the agent escalated
+   at the first decision, so the only evidence naming the true batch was never applied at all.
+
+Now split into `note_code_likelihood` (applied immediately, with the records and the label) and
+`note_date_likelihood` (still waits for the registry). On S7 the true batch, named nowhere
+except in prose, goes from **0.20 to 0.78** and becomes the leader; the records' candidate
+falls from 0.65 to 0.18.
+
+S7 still escalates, and that is correct rather than a remaining fault: 78% is not enough to
+file 52 units when the alternatives expire on very different dates. The claim the case
+demonstrates is about the **belief**, not the action, and the write-ups now say that.
+
+**Everything downstream improved**, on cases nobody wrote: correct commits 1,051/1,089 to
+**1,071/1,109**, and the headline against trusting the label from −78.6 to **−89.4 expired
+units** per run.
+
+**Why it stayed hidden.** There were already tests that the model's code path runs, that the
+candidate appears, and that an invented code is rejected. All of them passed throughout. None
+of them asked whether it *changed a decision*. There are now two that do, one on S7 and one
+across 600 generated cases, and they fail if the contribution goes inert again.
+
 ### Is the agent operating at the optimum?
 
 It was not, and it still is not fully. Asked whether the costs looked high, I measured the
@@ -1016,7 +1072,7 @@ construction and prove nothing.
 
 | policy | expired units | stock-out | escalations | £ per run | £ above the floor |
 |---|---:|---:|---:|---:|---:|
-| **agent** | **293.3** | 8.0 | 39.0 | 153,852 | **15,675** |
+| **agent** | **284.9** | 7.8 | 37.6 | 153,404 | **15,227** |
 | trust the label | 374.3 | 6.5 | 35.1 | 156,932 | 18,755 |
 | trust the records | 1,756.8 | 5.1 | 7.5 | 222,352 | 84,175 |
 | always escalate | 782.9 | 8.6 | 104.7 | 177,913 | 39,736 |
@@ -1034,13 +1090,13 @@ the agent is better:
 
 | against | expired units | total £ |
 |---|---|---|
-| trust the label | **−81.0 [−121.4, −42.0]** | **−3,080 [−4,745, −1,442]** |
-| trust the records | −1,463.5 [−1,672.1, −1,262.8] | −68,501 [−75,945, −61,304] |
-| always escalate | −489.6 [−532.0, −448.1] | −24,061 [−26,083, −22,155] |
-| always segregate | +164.8 [+127.5, +202.8] | −59,193 [−62,811, −55,492] |
-| oracle | +293.3 [+260.3, +328.6] | +15,675 [+14,099, +17,374] |
+| trust the label | **−89.4 [−129.5, −50.6]** | **−3,528 [−5,193, −1,902]** |
+| trust the records | −1,471.8 [−1,681.0, −1,270.3] | −68,948 [−76,422, −61,735] |
+| always escalate | −498.0 [−541.5, −456.6] | −24,508 [−26,573, −22,571] |
+| always segregate | +156.4 [+119.1, +194.1] | −59,640 [−63,304, −55,927] |
+| oracle | +284.9 [+252.4, +320.3] | +15,227 [+13,692, +16,884] |
 
-**The headline: 22% fewer expired units than trusting the label, and cheaper, both intervals
+**The headline: 24% fewer expired units than trusting the label, and cheaper, both intervals
 excluding zero.** The agent beats every runnable policy on both counts. It does not beat the
 oracle, and should not — that is the floor.
 
@@ -1092,8 +1148,6 @@ carries the point.
 
 ---
 
-## Next steps
-
 ### P6 — what is left
 
 Everything the plan listed is done except forecasting, which the simulation does not need:
@@ -1113,8 +1167,108 @@ whether a batch was identified correctly.
 
 ### P7 — Demo screen
 
-- [ ] Streamlit page: carton image, probability bars, cost table, harm charts
-- [ ] Must run offline in under 45 seconds
+**New files:** `demo/panels.py`, `demo/app.py`, `tests/test_end_to_end.py`.
+
+    uv run streamlit run demo/app.py
+
+Four panes, matching the shot list: the carton and what the reader made of it, the
+probability per candidate after each piece of evidence, the cost table for each decision, and
+what the decision costs downstream against the committed simulation figures.
+
+**The arithmetic is not in the Streamlit file.** `demo/panels.py` produces every number as
+plain data and imports no Streamlit at all; `app.py` only renders. That is not tidiness - the
+screen is the thing being filmed, and if the numbers on camera came from code that only runs
+inside a web server, nothing could assert they are the numbers the agent actually produced.
+There is a test that the panel data matches the agent's own result field by field.
+
+It builds all twelve cases in well under a second against a 45-second budget, and a test
+replaces `anthropic.Anthropic` with a class that raises, to prove it never reaches for the
+network while filming. The page itself is executed in the suite through Streamlit's `AppTest`,
+because a script can be right in the data layer and still fail on a chart handed a frame of
+the wrong shape - a failure that would otherwise appear for the first time on camera.
+
+The hero case comes up first so the film does not open on a menu, and the screen states its
+own argument: the label is crisp, complete and passes its check digit (`looks_trustworthy`),
+and the agent files a different batch and is right.
+
+**The screen can also build a case nobody wrote.** The twelve recorded cases have real
+photographs and recorded model readings, so they are the only ones that show perception - but
+the agent was built while looking at them, so they can only show that it handles what it was
+shown. Picking "Generated now" draws a fresh warehouse, fresh shipments and a random fault on
+each source from a seed, and runs the agent on an answer nothing has seen. The warehouse, the
+database, the records, the registry and the paid lookups are all real; there is no photograph,
+and the screen says so.
+
+Seed 418 is the one worth showing: a reused label and a stale replica, so nothing anywhere
+names the true batch, and the agent commits confidently and is **wrong by 253 days**. Being
+able to show that live, on a case nobody wrote, is worth more than any number of successes -
+an interface that could only display wins would be worth nothing. There is a test that seed
+418 still fails, so the demo cannot quietly stop being honest.
+
+Both documents are new: [README.md](./README.md) covers the objectives, the architecture and
+the simulation; [demo/GUIDE.md](./demo/GUIDE.md) covers how to read the screen. Their countable
+claims are asserted in `tests/test_end_to_end.py` rather than left to drift.
+
+### End-to-end and uncertainty checks
+
+**The pipeline joins up.** Every case runs from a drawn image through reading, belief, both
+decisions and into stock movements. The image the screen shows is the one the reader read, the
+probability bars are the belief the decision used, and the ledger row agrees with the trace.
+Each of those is a join between layers, which every unit test can pass while the whole still
+produces nonsense.
+
+**Uncertainty, probed hard.** Across 1,500 generated cases and 5,667 belief stages:
+
+| check | result |
+|---|---|
+| non-finite probabilities | 0 |
+| probabilities outside [0, 1] | 0 |
+| stages containing an exact zero | 0 |
+| cases where the catch-all reached zero | 0 |
+| worst deviation from summing to 1 | 2.2e-16 |
+| negative or non-finite expected costs | 0 |
+
+Nothing reaching exactly zero matters more than it sounds: nothing recovers from zero, and the
+sources that rule candidates out can themselves be wrong.
+
+Beyond the arithmetic, the direction checks. A belief fed fifty rounds of evidence that
+explains nothing stays a distribution rather than becoming `nan`. Making the reliability model
+distrust labels makes the agent commit *less*, not more. A more confident reading of the same
+code never counts for less than a doubtful one. Each of those would look plausible if it ran
+backwards.
+
+### What the end-to-end tests found
+
+**Escalation was under-priced.** When the agent files the wrong batch it is charged for broken
+traceability; when a *person* filed the wrong batch it was not. The same mistake cost less
+depending on who made it, which tilted every close call towards handing the work over. Fixed
+in `policy.escalate_cost`. It moves the headline slightly - 22% to 21% fewer expired units -
+and changes no conclusion.
+
+**A property I had wrong, and what is actually true.** I expected spend on lookups to rise with
+the size of the return. It does not: on the hero case the agent pays £0.30 for the registry at
+1, 40 and 84 units, and stops at 200. That looked like a bug and is not. Above about a hundred
+units the risk left over *after* the lookup still exceeds what a person costs, so buying it
+would not change the action - and the agent correctly declines to pay for information it
+cannot act on. The `gather` option is priced at exactly escalate + £0.30 at those sizes, which
+is the arithmetic saying precisely that.
+
+Two things are asserted instead:
+
+- **It never pays for a lookup and then escalates anyway.** Over 400 generated cases, 276
+  bought a lookup and 0 of them escalated afterwards: £0.00 wasted. This is the obvious way
+  for a value-of-information calculation to be wrong, and it leaves almost no trace.
+- **A large return is never filed under a batch without buying the evidence first.** More at
+  stake must never mean less care. Declining to check *and* committing would be reckless;
+  declining to check and escalating is not.
+
+Worth stating plainly: this bounds where the agent adds value. Its willingness to buy
+information runs out at the point where a human dominates, which on the hero case is around a
+hundred units, and that point is set by `human_error_rate` - a hand-set figure.
+
+---
+
+## Next steps
 
 ### P8 — Video
 

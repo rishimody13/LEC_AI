@@ -121,29 +121,77 @@ P_DATE_MATCHES = 0.55
 P_DATE_MISMATCH = 0.14
 P_NO_INFORMATION = 1.0
 
+# How much it counts for when the note writes a lot code out in words.
+#
+# This is the one thing in the whole system that a database query cannot do: a
+# warehouse note saying "inner cases stamped B-2296" is prose, and no `SELECT`
+# will ever find it. Somebody opened the pallet and read the inner cases, which
+# is a deliberate act and better evidence than most of what is here.
+#
+# It is not certain. They can transcribe a digit wrong, or read the code off a
+# case that came from a different consignment on a mixed pallet. The ratio below
+# is 16:1, which sits deliberately between the label's two extremes: about 5:1
+# for a customer who repacks, and 99:1 for one who does not. A note is better
+# evidence than a repacker's label and worse than an ordinary customer's.
+#
+# This existed as dead weight until it was measured. The model extracted the code
+# and `candidates.build` turned it into a candidate, but nothing here ever
+# mentioned it, so the candidate arrived with no evidence behind it and was then
+# penalised for being absent from the records. It could not win, and across 1,500
+# generated cases it changed no decision at all.
+P_NOTE_NAMES_THIS_BATCH = 0.80
+P_NOTE_NAMES_ANOTHER_BATCH = 0.05
 
-def note_likelihood(
+
+def note_code_likelihood(facts: NoteFacts, candidates: CandidateSet) -> dict[str, float]:
+    """How likely the note is, given a lot code written out in it.
+
+    Applied straight away, with the records and the label, because it needs
+    nothing bought. The note names a batch and `candidates.build` has already
+    checked that batch is real; there is nothing left to look up.
+
+    This was the bug. The whole thing used to live in one function that also
+    handled print dates, and print dates *do* need the paid registry - so the
+    function was only ever called after a lookup had been bought. On the one case
+    built around this feature the agent escalated at the first decision, which
+    meant the only evidence naming the true batch was never applied at all.
+    """
+    out = {c.name: P_NO_INFORMATION for c in candidates.candidates}
+    named = {code.strip().upper() for code in facts.batch_codes_mentioned}
+    if not named:
+        return out
+
+    for c in candidates.candidates:
+        if c.is_catch_all or c.batch_id is None:
+            # Somebody wrote a lot code down. That is evidence against "it is a
+            # batch nobody named" in the same way it is against the others.
+            out[c.name] = P_NOTE_NAMES_ANOTHER_BATCH
+            continue
+        out[c.name] = (
+            P_NOTE_NAMES_THIS_BATCH if c.batch_id.upper() in named else P_NOTE_NAMES_ANOTHER_BATCH
+        )
+    return out
+
+
+def note_date_likelihood(
     facts: NoteFacts,
     candidates: CandidateSet,
     registry: RegistryEvidence | None,
 ) -> dict[str, float]:
-    """How likely the note is, for each candidate.
+    """How likely the note is, given a print date stamped on the goods.
 
     Only usable once we know when each batch was made, which comes from the paid
-    registry lookup. Before that the note says nothing about which batch it is.
+    registry lookup. Before that a date says nothing about which batch it is.
     """
-    flat = {c.name: P_NO_INFORMATION for c in candidates.candidates}
+    out = {c.name: P_NO_INFORMATION for c in candidates.candidates}
     if not facts.print_dates or registry is None or not registry.available:
-        return flat
+        return out
 
-    out: dict[str, float] = {}
     for c in candidates.candidates:
         if c.is_catch_all or c.batch_id is None:
-            out[c.name] = P_NO_INFORMATION
             continue
         record = registry.record(c.batch_id)
         if record is None:
-            out[c.name] = P_NO_INFORMATION
             continue
         out[c.name] = (
             P_DATE_MATCHES if record.manufactured in facts.print_dates else P_DATE_MISMATCH

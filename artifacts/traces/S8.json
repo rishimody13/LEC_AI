@@ -68,9 +68,10 @@
         },
         {
           "action": "escalate",
-          "expected_cost_gbp": 19.09,
+          "expected_cost_gbp": 19.52,
           "exposure": {
             "human_review": 1.0,
+            "misattribution_unit": 0.44,
             "expired_unit": 0.22
           },
           "fee_gbp": 0.0
@@ -124,9 +125,10 @@
         },
         {
           "action": "escalate",
-          "expected_cost_gbp": 19.09,
+          "expected_cost_gbp": 19.52,
           "exposure": {
             "human_review": 1.0,
+            "misattribution_unit": 0.44,
             "expired_unit": 0.22
           },
           "fee_gbp": 0.0
@@ -155,27 +157,27 @@
         }
       ],
       "chosen": "commit B-2290 -> A-07-05",
-      "margin_gbp": 8.9,
-      "margin_share": 0.8723,
+      "margin_gbp": 9.32,
+      "margin_share": 0.9137,
       "fragile": false,
       "sensitivity": [
         {
           "parameter": "misattribution_unit",
           "now_gbp": 0.96,
-          "flips_at_gbp": 1.87,
-          "slack_x": 1.9
+          "flips_at_gbp": 1.95,
+          "slack_x": 2.0
         },
         {
           "parameter": "expired_unit",
           "now_gbp": 48.0,
-          "flips_at_gbp": 6.4,
-          "slack_x": 7.5
+          "flips_at_gbp": 4.43,
+          "slack_x": 10.8
         },
         {
           "parameter": "wrong_zone",
           "now_gbp": 2.13,
-          "flips_at_gbp": 42.0,
-          "slack_x": 19.7
+          "flips_at_gbp": 43.89,
+          "slack_x": 20.6
         }
       ]
     }
