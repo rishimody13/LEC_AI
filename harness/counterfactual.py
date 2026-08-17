@@ -154,10 +154,12 @@ def report(runs: dict[str, list[simulate.Metrics]], costs: CostModel) -> str:
         )
     lines.append("")
     lines.append(
-        "The absolute £ column is dominated by ordinary warehouse costs - mostly writing off "
-        "opening stock that was already near its date - which are all but identical under "
-        "every policy. Only the last column and the paired differences below say anything "
-        "about the decisions."
+        "The absolute £ column is dominated by stock written off at its recorded best-before, "
+        "which comes from the replenishment rule rather than from any decision about a return: "
+        "a fixed order-up-to level with no forecasting leaves long-dated stock at the back of "
+        "the queue until some of it ages out. Every policy that files stock pays this within "
+        "1%. Only the last column and the paired differences below say anything about the "
+        "decisions."
     )
 
     lines.append("")

@@ -7,7 +7,7 @@
 
 ```bash
 uv sync --extra dev --extra demo
-uv run pytest                              # 688 tests
+uv run pytest                              # 690 tests
 uv run streamlit run demo/app.py           # the screen
 uv run python -m harness.sweep 2000        # the agent against cases nobody wrote
 uv run python -m harness.counterfactual 600  # the harm, measured
@@ -55,7 +55,7 @@ and compared, and the cheapest wins.
 | R6 | Trust, pay to check, or escalate | All four actions win somewhere |
 | R7 | Assign stock without causing drift | `ledger/` — append-only, reversible, drift measured against truth |
 | R8 | Prove the harm, measured | 600 paired 540-day simulations: **24% fewer expired units** than trusting the label |
-| R9 | Working code | 688 tests, ruff and mypy strict clean, runs offline |
+| R9 | Working code | 690 tests, ruff and mypy strict clean, runs offline |
 | R10 | A case where the obvious answer is wrong | S4, and the demo says so on screen |
 
 ---
@@ -298,12 +298,12 @@ result.
 
 | policy | expired units shipped | £ per run | £ above the floor |
 |---|---:|---:|---:|
-| **agent** | **284.9** | 153,404 | **15,227** |
-| trust the label | 374.3 | 156,932 | 18,755 |
-| trust the records | 1,756.8 | 222,352 | 84,175 |
-| always escalate | 782.9 | 177,913 | 39,736 |
-| always segregate | 128.5 | 213,044 | 74,867 |
-| oracle (knows the answer) | 0.0 | 138,177 | 0 |
+| **agent** | **284.9** | 152,143 | **15,227** |
+| trust the label | 374.3 | 155,671 | 18,755 |
+| trust the records | 1,756.8 | 221,091 | 84,175 |
+| always escalate | 782.9 | 176,652 | 39,736 |
+| always segregate | 128.5 | 211,783 | 74,867 |
+| oracle (knows the answer) | 0.0 | 136,916 | 0 |
 
 Paired against each alternative, 95% bootstrap intervals. Negative means the agent is better:
 
@@ -314,10 +314,25 @@ Paired against each alternative, 95% bootstrap intervals. Negative means the age
 | always escalate | −498 [−542, −457] | −24,508 [−26,573, −22,571] |
 | always segregate | +156 [+119, +194] | −59,640 [−63,304, −55,927] |
 
-**Read the third column, not the second.** The absolute £ figure is 88% ordinary warehouse cost
-— mostly writing off opening stock that was already near its date — and is nearly identical
-under every policy. Against the part decisions actually control, the agent is 16% better than
-trusting the label.
+**Read the third column, not the second.** The absolute £ figure is ~94% stock written off at
+its recorded best-before, and that comes from the **replenishment rule, not from any decision
+about a return**: a fixed order-up-to level with no forecasting leaves long-dated stock sitting
+behind shorter-dated deliveries in the queue until some of it ages out. Every policy that files
+stock pays it within 1%, which is what makes it a floor. Against the part decisions actually
+control, the agent is 19% better than trusting the label.
+
+This is why **the oracle costs £136,916 rather than nothing.** It knows the answer, so it ships
+zero expired units, escalates nothing and buys no lookups — its entire cost is that same
+write-off. "Some cost is unavoidable" means unavoidable *by the identification decision*, which
+is the only thing being compared here. It is not a claim that a real warehouse must lose 10% of
+its stock; that figure is a property of the simulated inventory policy, and forecasting was
+deliberately left out of scope because it has no bearing on whether a batch was identified
+correctly.
+
+The one policy that does move the floor is **always segregate**, which writes off 47% more
+(18,518 units against 12,551) because holding everything under the earliest expiry any batch
+could have means much of it is scrapped before anyone gets round to identifying it. That is a
+cost its decisions genuinely cause, and a test keeps the distinction honest.
 
 Two results worth reading carefully:
 
@@ -346,7 +361,7 @@ there.
 
 ## 4. Testing
 
-688 tests. The important distinction is between the two kinds:
+690 tests. The important distinction is between the two kinds:
 
 | | recorded cases | generated cases |
 |---|---|---|

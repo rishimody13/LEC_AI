@@ -262,7 +262,30 @@ actually run.
 | **trust the records** | Believe the warehouse system: file it as whatever we shipped most of |
 | **always escalate** | Send every return to a person. Not safe: a 1% human error rate applied to *every* return ships more expired stock than the agent does |
 | **always segregate** | Hold everything back under the earliest expiry any batch could have. Ships almost no expired stock and costs £59,000 more per run, because held stock is never on a pick face when it is needed |
-| **oracle** | **Not a policy anyone can run — it knows the answer.** It is the floor: the harm that remains when every identification is correct. Everything else is measured against it rather than against zero, because some cost is unavoidable |
+| **oracle** | **Not a policy anyone can run — it knows the answer.** It is the floor. Everything else is measured against it rather than against zero — see below for why it is not zero itself |
+
+### Why the oracle costs anything at all
+
+It knows the answer, so it ships **zero** expired units, escalates nothing, buys no lookups and
+strands no stock. Its entire cost — about £137,000 a run — is stock written off when its
+recorded best-before passes on the shelf.
+
+That write-off has nothing to do with identifying returns. It comes from the **replenishment
+rule**: the simulation reorders up to a fixed level with no forecasting, so long-dated stock
+sits behind shorter-dated deliveries in the first-expired-first-out queue and some of it ages
+out before it is picked. Every policy that files stock pays it within 1% of every other, which
+is exactly what makes it a floor and why the results are quoted *above* it.
+
+So "some cost is unavoidable" means **unavoidable by the identification decision**, which is the
+only thing being compared. It is not a claim that a real warehouse must lose a tenth of its
+stock. That figure is a property of the simulated inventory policy; forecasting was left out of
+scope because it has no bearing on whether a batch was identified correctly.
+
+One policy does move the floor. **Always segregate** writes off 47% more (18,518 units against
+12,551), because dating everything at the earliest expiry any batch could have means much of it
+is scrapped before anyone comes to identify it. That is a cost its own decisions cause, so it
+is not part of the floor — and it is a large part of why holding everything is expensive rather
+than merely unhelpful.
 
 ### The two paid lookups
 
@@ -303,12 +326,3 @@ panel data matches the agent's result field by field, so what is on camera canno
 what the agent actually did.
 ---
 
-## 6. Filming notes
-
-- Opens on S4 so the film does not start on a menu.
-- Everything is precomputed and cached; switching case is instant, and there is no flicker to
-  edit around.
-- The cost table is dense. Hold it for a full eight seconds and highlight one row at a time.
-- The strongest beat available: run S4, then switch to generated seed 418 and show the agent
-  getting one *wrong*, live, on a case nobody wrote. An interface that could only display
-  successes would be worth nothing.

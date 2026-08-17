@@ -215,8 +215,16 @@ def run(
     home_of: dict[str, str] = {b.batch_id: b.home_bin for b in world.batches}
 
     # Opening stock, so the warehouse is not empty on day one.
+    #
+    # Stock that has already passed its best-before is not loaded. The generated
+    # world gives batches expiry dates from ten days in the past to five hundred
+    # in the future, and holding thousands of units of something that expired
+    # last week is not a warehouse - it is an artefact of the generator. Loading
+    # it anyway meant the first few simulated days wrote off a tenth of
+    # everything ever received, which no policy could influence and which swamped
+    # the figures that were actually about decisions.
     for batch in world.batches:
-        if batch.quantity_on_hand <= 0:
+        if batch.quantity_on_hand <= 0 or batch.best_before < start:
             continue
         where = Position(sku, batch.home_bin, Lot(batch.batch_id, batch.best_before))
         book.append(

@@ -7,37 +7,37 @@
       "expired_units_shipped_per_run": 284.95,
       "stockout_units_per_run": 7.753333333333333,
       "escalations_per_run": 37.61333333333334,
-      "cost_gbp_per_run": 153404.1887973856
+      "cost_gbp_per_run": 152143.27279738564
     },
     "trust the label": {
       "expired_units_shipped_per_run": 374.31,
       "stockout_units_per_run": 6.543333333333333,
       "escalations_per_run": 35.10166666666667,
-      "cost_gbp_per_run": 156931.80628104575
+      "cost_gbp_per_run": 155670.89028104575
     },
     "trust the records": {
       "expired_units_shipped_per_run": 1756.7783333333334,
       "stockout_units_per_run": 5.095,
       "escalations_per_run": 7.495,
-      "cost_gbp_per_run": 222352.39450980394
+      "cost_gbp_per_run": 221091.47850980394
     },
     "always escalate": {
       "expired_units_shipped_per_run": 782.945,
       "stockout_units_per_run": 8.553333333333333,
       "escalations_per_run": 104.65333333333334,
-      "cost_gbp_per_run": 177912.57189542486
+      "cost_gbp_per_run": 176651.65589542483
     },
     "always segregate": {
       "expired_units_shipped_per_run": 128.535,
       "stockout_units_per_run": 15.888333333333334,
       "escalations_per_run": 0.0,
-      "cost_gbp_per_run": 213044.2282352941
+      "cost_gbp_per_run": 211783.31223529414
     },
     "oracle": {
       "expired_units_shipped_per_run": 0.0,
       "stockout_units_per_run": 5.328333333333333,
       "escalations_per_run": 0.0,
-      "cost_gbp_per_run": 138177.05294117646
+      "cost_gbp_per_run": 136916.1369411765
     }
   },
   "agent_against": {

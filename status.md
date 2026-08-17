@@ -24,7 +24,7 @@ P7 demo screen  [####################] done
 P8 video        [                    ] next
 ```
 
-**Current state:** 688 tests pass, ruff clean, mypy strict clean. Everything runs offline.
+**Current state:** 690 tests pass, ruff clean, mypy strict clean. Everything runs offline.
 
 Building the ledger found four real faults, all of them in the direction that ships expired
 stock. They are written up under "what the ledger found" below, each with a named regression
@@ -81,7 +81,7 @@ decision produced, so the trace and the stock record are the same document.
 | File | Tests | What it covers |
 |---|---:|---|
 | `test_generalises.py` | 203 | Properties across 1-400 units on the hand-written cases |
-| `test_harm_is_real.py` | 12 | The R8 proof: policies compared over 18 months, with intervals |
+| `test_harm_is_real.py` | 14 | The R8 proof: policies compared over 18 months, with intervals |
 | `test_end_to_end.py` | 116 | Image to shelf, the demo screen, and uncertainty probed hard |
 | `test_simulation.py` | 26 | The simulator itself: picking rules, truth tracking, scoring |
 | `test_ledger.py` | 109 | The stock record: append-only, conserved, reversible, and its drift |
@@ -99,7 +99,7 @@ decision produced, so the trace and the stock record are the same document.
 | `test_wms_client.py` | 8 | Each warehouse fault leaves the right symptom |
 | `test_coding.py` | 5 | Check digits, including the exhaustive single-digit proof |
 | `test_isolation.py` | 4 | Neither `agent/` nor `ledger/` can import ground truth |
-| **Total** | **688** | |
+| **Total** | **690** | |
 
 ---
 
@@ -1072,18 +1072,26 @@ construction and prove nothing.
 
 | policy | expired units | stock-out | escalations | £ per run | £ above the floor |
 |---|---:|---:|---:|---:|---:|
-| **agent** | **284.9** | 7.8 | 37.6 | 153,404 | **15,227** |
-| trust the label | 374.3 | 6.5 | 35.1 | 156,932 | 18,755 |
-| trust the records | 1,756.8 | 5.1 | 7.5 | 222,352 | 84,175 |
-| always escalate | 782.9 | 8.6 | 104.7 | 177,913 | 39,736 |
-| always segregate | 128.5 | 15.9 | 0.0 | 213,044 | 74,867 |
-| oracle (knows the answer) | 0.0 | 5.3 | 0.0 | 138,177 | 0 |
+| **agent** | **284.9** | 7.8 | 37.6 | 152,143 | **15,227** |
+| trust the label | 374.3 | 6.5 | 35.1 | 155,671 | 18,755 |
+| trust the records | 1,756.8 | 5.1 | 7.5 | 221,091 | 84,175 |
+| always escalate | 782.9 | 8.6 | 104.7 | 176,652 | 39,736 |
+| always segregate | 128.5 | 15.9 | 0.0 | 211,783 | 74,867 |
+| oracle (knows the answer) | 0.0 | 5.3 | 0.0 | 136,916 | 0 |
 
-**Read the last column, not the one before it.** The absolute £ figure is 88% ordinary
-warehouse cost — mostly writing off opening stock that was already near its date — and is
-nearly identical under every policy. Against the whole figure the agent looks 2% better than
-trusting the label; against the part that decisions actually control, it is **16% better**.
-The paired differences below are unaffected either way, because the baseline cancels.
+**Read the last column, not the one before it.** The absolute £ figure is ~94% stock written
+off at its recorded best-before, and that comes from the **replenishment rule rather than from
+any decision about a return**: a fixed order-up-to level with no forecasting leaves long-dated
+stock behind shorter-dated deliveries in the queue until some ages out. Every policy that files
+stock pays it within 1%, which is what makes it a floor. Against the whole figure the agent
+looks 2% better than trusting the label; against the part decisions actually control, it is
+**19% better**.
+
+This is also why the oracle costs £136,916 rather than nothing: knowing the answer removes
+every expired unit, every escalation and every lookup, and leaves exactly that write-off. The
+one policy that does move the floor is always-segregate, at 47% more write-off, because dating
+everything at the earliest possible expiry scraps stock before anyone identifies it — a cost
+its decisions genuinely cause. Two tests now hold that distinction in place.
 
 Agent against each alternative, paired seed by seed, 95% bootstrap intervals. Negative means
 the agent is better:

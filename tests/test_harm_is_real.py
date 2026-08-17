@@ -171,3 +171,49 @@ def test_stock_is_conserved_across_the_whole_run(seed):
     assert metrics.returns_handled > 0
     assert metrics.units_in - metrics.units_out == metrics.units_on_hand
     assert metrics.units_in > metrics.units_returned
+
+
+def test_the_floor_is_not_something_any_policy_can_move(runs):
+    """Why the results are quoted above the oracle rather than in absolute pounds.
+
+    Almost all of the absolute cost is stock written off at its recorded
+    best-before, and that is a property of the *replenishment* rule - a fixed
+    order-up-to level with no forecasting, so long-dated stock accumulates at the
+    back of a first-expired-first-out queue and ages out. It has nothing to do
+    with identifying returns, and every policy pays almost exactly the same.
+
+    If this ever stopped being true, the "above the floor" column would be
+    comparing policies on something they do not control, and the honest framing
+    would have to change with it.
+    """
+    written_off = {
+        name: sum(m.written_off_units for m in metrics) / len(metrics)
+        for name, metrics in runs.items()
+    }
+
+    # One real exception. Holding everything back dates the stock at the earliest
+    # expiry any batch could have, and a good deal of it is then written off
+    # before anybody comes to identify it. That is a cost the decision genuinely
+    # causes, not part of the floor, and it is why segregating everything is
+    # expensive rather than merely useless.
+    filing = {k: v for k, v in written_off.items() if k != "always segregate"}
+    lowest, highest = min(filing.values()), max(filing.values())
+    assert lowest > 0, "no write-off at all means this is not measuring anything"
+    assert (highest - lowest) / highest < 0.05, (
+        f"write-off differs by more than 5% between the policies that file stock, so it is "
+        f"not a floor: { {k: round(v) for k, v in filing.items()} }"
+    )
+    assert written_off["always segregate"] > highest * 1.2, (
+        "holding everything should destroy noticeably more stock than filing it"
+    )
+
+
+def test_the_oracle_pays_only_the_floor(runs):
+    """It knows the answer, so it should carry no cost that a decision caused."""
+    oracle = runs["oracle"]
+    assert all(m.expired_units_shipped == 0 for m in oracle)
+    assert all(m.escalations == 0 for m in oracle)
+    assert all(m.lookup_spend_gbp == 0 for m in oracle)
+    assert all(m.stranded_units == 0 for m in oracle), (
+        "an oracle that strands stock is not a floor - it would flatter every comparison against it"
+    )
