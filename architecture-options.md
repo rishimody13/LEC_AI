@@ -1,5 +1,7 @@
 # Agent architectures: options, trade-offs and failure modes
 
+**Start here:** [README.md](./README.md) · **Progress:** [status.md](./status.md)
+
 **Repo:** `LEC_AI` · **Plan:** [PLAN.md](./PLAN.md) · **Progress:** [status.md](./status.md)
 
 Phases P0–P2 built the world around the agent: the warehouse, the damaged labels, the two

@@ -1330,17 +1330,7 @@ Worth stating plainly: this bounds where the agent adds value. Its willingness t
 information runs out at the point where a human dominates, which on the hero case is around a
 hundred units, and that point is set by `human_error_rate` - a hand-set figure.
 
----
 
-## Next steps
-
-### P8 — Video
-
-- [ ] Follow [demo/SCRIPT.md](./demo/SCRIPT.md) — timed to 447 spoken words, with the cuts to
-      make if it runs long, and the questions to expect written out with answers
-- [ ] `uv run python -m demo.flip` is the on-camera proof that there is no default branch
-- [ ] The harm chart now has real numbers behind it: `artifacts/harm.json`, and
-      `uv run python -m harness.counterfactual 600` reproduces them
 
 ---
 

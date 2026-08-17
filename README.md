@@ -5,106 +5,43 @@
 · **Design option discussion and decision:** [architecture-options.md](./architecture-options.md)
 · **Where the model is used:** [llm-integration.md](./llm-integration.md)
 
-```bash
-uv sync --extra dev --extra demo
-uv run python -m demo.run S4               # the agent on the hero case, in the terminal
-uv run streamlit run demo/app.py           # the same thing, with pictures
-uv run pytest                              # 712 tests
-```
+A warehouse gets part of an order back. The carton's label and the warehouse system disagree
+about which batch it is, and somebody has to decide who to believe. Get it wrong and nothing
+breaks today — months later you ship expired stock.
 
-Everything runs offline. Nothing needs an API key. 
+**RECONCILE** keeps a probability for each possible answer and takes whichever action costs
+least in expected pounds: file it, pay for a lookup, hold it back, or hand it to a person.
+Over 600 simulated runs of eighteen months it ships **25% fewer expired units** than trusting
+the label, with a confidence interval that excludes zero.
+
+---
 
 ## 0. Running it
 
-Nothing here needs a network or an API key. The one command that does is marked.
-
-### Install
-
 ```bash
-uv sync --extra dev --extra demo      # dev = tests and linting, demo = the screen
+uv sync --extra dev --extra demo     # dev = tests and linting, demo = the screen
+uv run python -m demo.run S4         # start here
 ```
 
-`--extra demo` is only needed for the Streamlit page; everything else works without it. There
-is also `--extra llm`, needed only to re-record the model readings.
+Everything runs offline except the last command in the table, which is the only one that calls
+a model or needs an API key.
 
-### Run the agent on one return
+| Command | What it does |
+|---|---|
+| `python -m demo.run S4` | The agent on one return, in the terminal: the label reading, the probabilities after each piece of evidence with what it would do at that point, both decisions with every option priced, and the outcome against the truth. **Start here.** |
+| `python -m demo.run --list` | The twelve recorded cases |
+| `python -m demo.run --seed 418` | A case generated on the spot, that nobody wrote |
+| `streamlit run demo/app.py` | The same walkthrough with pictures. Reading guide: [demo/GUIDE.md](./demo/GUIDE.md) |
+| `python -m demo.flip` | Runs one case three times, changing a single cost figure. The chosen action changes with it — the demonstration that there is no hardcoded fallback |
+| `python -m harness.sweep 2000` | The agent against 2,000 cases nobody wrote. Add `--miscalibrated` for a world whose fault rates the agent does not believe. About a minute |
+| `python -m harness.calibration` | Is it as sure as it should be? Add `--sweep` for the evidence weight against realised cost |
+| `python -m harness.counterfactual 600` | The harm: six policies through the same 540 days, 600 seeds. Several minutes; committed results in `artifacts/harm.json` |
+| `pytest` | 712 tests, about four minutes |
+| `ruff check . && ruff format --check . && mypy` | Lint and types |
+| `python -m services.record_traces` | Rewrites `artifacts/traces/*.json`. Offline |
+| `python -m services.record_readings` | **Needs an API key and network.** Re-reads the label images and notes and rewrites `tests/cassettes/`. Only needed if you change an image or a note |
 
-```bash
-uv run python -m demo.run S4              # the hero case
-uv run python -m demo.run --list          # the twelve recorded cases
-uv run python -m demo.run --seed 418      # a case generated on the spot
-uv run python -m demo.run --seed 7 --miscalibrated
-```
-
-Prints the label reading, the belief after each piece of evidence with what it would do at
-that point, both decisions with every option priced, and the outcome against the truth. This
-is the quickest way to see what the agent actually did.
-
-### The demo screen
-
-```bash
-uv run streamlit run demo/app.py
-```
-
-Opens on S4. Tick **"step through the evidence"** to replay a case one source at a time.
-Reading guide: **[demo/GUIDE.md](./demo/GUIDE.md)**.
-
-### Show there is no default branch
-
-```bash
-uv run python -m demo.flip
-```
-
-Runs the same case three times, changing one cost figure. The chosen action changes with it.
-
-### The agent against cases nobody wrote
-
-```bash
-uv run python -m harness.sweep 2000                  # world matches the reliability model
-uv run python -m harness.sweep 2000 --miscalibrated  # it does not
-```
-
-Builds fresh worlds from seeds, checks properties rather than expected answers, and prints any
-breach with the seed that caused it so it reproduces alone. Takes about a minute for 2,000.
-
-### Is it as sure as it should be?
-
-```bash
-uv run python -m harness.calibration          # stated confidence vs how often it is right
-uv run python -m harness.calibration --sweep  # the evidence weight against realised cost
-```
-
-### The harm, measured
-
-```bash
-uv run python -m harness.counterfactual 600
-```
-
-Six policies through the same 540 days on 600 seeds, paired, with bootstrapped intervals.
-Takes several minutes. The committed results are in `artifacts/harm.json`.
-
-### Tests and checks
-
-```bash
-uv run pytest                    # 712 tests, about four minutes
-uv run pytest tests/test_sweep.py -q          # just the generated-case gate
-uv run pytest tests/test_harm_is_real.py -q   # just the R8 proof
-uv run ruff check . && uv run ruff format --check .
-uv run mypy
-```
-
-### Regenerating what is committed
-
-```bash
-uv run python -m services.record_traces    # artifacts/traces/*.json, offline
-uv run python -m services.record_readings  # NEEDS AN API KEY AND NETWORK
-```
-
-`record_readings` is the only command that calls a model. It re-reads the eight label images
-and eight notes and rewrites `tests/cassettes/`. You only need it if you change an image or a
-note; everything else replays the recordings.
-
----
+Prefix each with `uv run`.
 
 ## 1. The problem
 
@@ -134,6 +71,24 @@ least in expected pounds. It has four:
 Nothing is hardcoded. There is no `else` branch: every action, escalation included, is priced
 and compared, and the cheapest wins.
 
+### Terms
+
+Only the ones needed to read the rest. `agent/` never sees any of the ground-truth ones.
+
+| Term | Meaning |
+|---|---|
+| **Batch** | One production run. Every unit in a batch shares a best-before date, so getting the batch wrong gets the expiry wrong |
+| **Bin** | A shelf location. Also a holding area and a quarantine area, neither of which is picked from |
+| **Check digit** | A last digit computed from the others, so a single misread character makes a code fail validation. It tells "I misread it" apart from "it genuinely says something else" |
+| **First-expired-first-out** | The standard picking rule: always ship the stock that expires soonest. This is why a wrong expiry is dangerous — it changes what gets picked, and when |
+| **Candidate** | One possible answer, e.g. "this is batch B-2288". Each carries a probability and they add to 1 |
+| **Catch-all** | An extra candidate meaning "a batch nobody listed". Without it a confident wrong answer cannot be contradicted |
+| **Prior** | What each candidate is worth before any evidence. Here: how much of each batch is in the building |
+| **Likelihood** | How well a candidate explains a piece of evidence — P(evidence given candidate). **Not** a probability of the candidate, and it does not add to 1 across candidates |
+| **Drift** | The gap between what the stock record says and what is physically there |
+| **Unit-days** | Units multiplied by days. 84 units recorded as lasting 166 days longer than they do is 13,944 unit-days of expiry error |
+| **Paired comparison** | Every policy gets the same warehouse, demand and returns, so the only difference between them is the decision |
+
 ### Objectives
 
 | # | Requirement | Where it is met |
@@ -151,7 +106,30 @@ and compared, and the cheapest wins.
 
 ---
 
-## 2. End-to-end architecture
+## 2. Architecture
+
+### 2.1 Where everything lives
+
+```
+world/       ground truth: warehouse, batches, label images   (agent/ must not import)
+services/    evidence sources, each able to fail on its own
+agent/       candidates, belief, constraints, value of information, policy, loop, trace
+ledger/      append-only stock movements, and drift against truth
+downstream/  demand, first-expired-first-out picking, the 540-day simulation
+harness/     generated cases, properties, sweeps, policies, the counterfactual
+demo/        the screen and the terminal walkthrough
+common/      batch codes and check digits
+config/      cost basis, reliability counts, the 12 recorded cases
+tests/       712 tests, and the recorded model readings
+artifacts/   label images, decision traces, committed harm figures
+```
+
+Two of those boundaries are enforced by tests rather than by convention. **`agent/` and
+`ledger/` cannot import `world/`** — if either could read the answers, every harm number here
+would be unfalsifiable. `ledger/drift.py` and `downstream/` are the only places the two sides
+meet, which is why they are separate files.
+
+### 2.2 How the pieces fit
 
 ```mermaid
 flowchart TB
@@ -217,7 +195,7 @@ zero would mean nothing because both sides of the comparison would come from the
 `ledger/drift.py` and `downstream/` are the only places the two sides meet, which is exactly
 why they are separate files.
 
-### 2.1 The world
+### 2.3 The world
 
 `world/generators.py` builds one fixed, hand-checkable warehouse: 5 batches of one product,
 8 bins including a goods-in bin, a hold area and a quarantine area, 4 customers (one of which
@@ -238,7 +216,7 @@ apart from "this label genuinely says something else". Changing any single body 
 breaks the check digit — verified exhaustively — which is why case S6 is a physical tear rather
 than a misread.
 
-### 2.2 How a decision is made
+### 2.4 How a decision is made
 
 ```mermaid
 sequenceDiagram
@@ -286,7 +264,7 @@ A label can be in one of three states — read correctly, misread, or *genuinely
 the wrong box* (a reused outer carton). That third state is what lets the agent say "this label
 is perfectly legible, and I still do not believe it", which is the hero case.
 
-### 2.3 Where the model is used
+### 2.5 Where the model is used
 
 Two calls, both `claude-sonnet-5`, and **neither runs when the agent runs**:
 
@@ -325,7 +303,7 @@ agent gets more of them right with it than without. `agent/candidates.py` itself
 model call — it consumes `NoteFacts` — which is the point of the split, but it does mean the
 contribution has to be measured end to end rather than inferred from the code.
 
-### 2.4 The stock ledger
+### 2.6 The stock ledger
 
 Append-only, enforced by SQLite triggers rather than good intentions: `UPDATE` and `DELETE`
 abort. Two ideas do the work:
@@ -375,11 +353,7 @@ Nothing malfunctions at any point — the picker is doing its job correctly on a
 Two things are never picked, and the cost model depends on both: **stock with no recorded
 expiry** (first-expired-first-out cannot rank what it cannot date) and **non-active bins**.
 
-### 3.1 Running it
-
-```bash
-uv run python -m harness.counterfactual 600
-```
+### 3.1 How the comparison is made
 
 The comparison is **paired**: for a given seed every policy gets the same warehouse, the same
 demand, the same returns and the same faults, so the only difference is what was decided. The
@@ -411,25 +385,22 @@ Paired against each alternative, 95% bootstrap intervals. Negative means the age
 | always escalate | −502 [−546, −462] | −24,658 [−26,736, −22,693] |
 | always segregate | +152 [+115, +189] | −59,790 [−63,420, −56,099] |
 
-**Read the third column, not the second.** The absolute £ figure is ~94% stock written off at
-its recorded best-before, and that comes from the **replenishment rule, not from any decision
-about a return**: a fixed order-up-to level with no forecasting leaves long-dated stock sitting
-behind shorter-dated deliveries in the queue until some of it ages out. Every policy that files
-stock pays it within 1%, which is what makes it a floor. Against the part decisions actually
-control, the agent is 19% better than trusting the label.
+**Read the last column, not the one before it.** The absolute £ figure is ~94% stock written
+off at its recorded best-before, and that comes from the **replenishment rule, not from any
+decision about a return**: reordering to a fixed level with no forecasting leaves long-dated
+stock behind shorter-dated deliveries until some of it ages out. Every policy that files stock
+pays it within 1%, which is what makes it a floor. Against the part decisions control, the
+agent is **20% better** than trusting the label.
 
-This is why **the oracle costs £136,916 rather than nothing.** It knows the answer, so it ships
-zero expired units, escalates nothing and buys no lookups — its entire cost is that same
-write-off. "Some cost is unavoidable" means unavoidable *by the identification decision*, which
-is the only thing being compared here. It is not a claim that a real warehouse must lose 10% of
-its stock; that figure is a property of the simulated inventory policy, and forecasting was
-deliberately left out of scope because it has no bearing on whether a batch was identified
-correctly.
+That floor is also why **the oracle costs £136,916 rather than nothing.** Knowing the answer
+removes every expired unit, every escalation and every lookup, and leaves exactly that
+write-off. It is not a claim that a real warehouse must lose a tenth of its stock — that is a
+property of the simulated inventory policy, and forecasting was left out of scope because it
+has no bearing on whether a batch was identified correctly.
 
-The one policy that does move the floor is **always segregate**, which writes off 47% more
-(18,518 units against 12,551) because holding everything under the earliest expiry any batch
-could have means much of it is scrapped before anyone gets round to identifying it. That is a
-cost its decisions genuinely cause, and a test keeps the distinction honest.
+One policy does move the floor: **always segregate** writes off 47% more, because dating
+everything at the earliest expiry any batch could have scraps much of it before anyone
+identifies it. That cost its decisions genuinely cause, and a test keeps the distinction.
 
 Two results worth reading carefully:
 
@@ -440,19 +411,6 @@ Two results worth reading carefully:
 - **Segregating everything is safe and useless.** Fewest expired units of any runnable policy,
   and £59,125 more expensive, because held stock is never on a pick face when it is needed.
   Quoting the expiry number alone would make it look like the winner.
-
-### 3.3 Six months was not long enough
-
-The plan assumed a 180-day horizon. That was the biggest flagged risk and it was real:
-
-| horizon | 180d | 270d | 365d | 540d | 730d |
-|---|---:|---:|---:|---:|---:|
-| expired units, same 8 seeds | 644 | 3,129 | 1,772 | 4,730 | 3,729 |
-
-At 180 days **six of the eight seeds report zero**. A six-month run would have concluded there
-was no difference between policies worth having. Being slow is the entire point of this
-failure, so the measurement has to outlast it. The horizon is 540 days and a test keeps it
-there.
 
 ---
 
@@ -477,88 +435,33 @@ answers, in two worlds:
 - **Miscalibrated** — every fault equally likely. Failures there mean the beliefs are wrong,
   which is a different thing, so only the properties that must hold regardless are checked.
 
-```bash
-uv run python -m harness.sweep 2000                 # calibrated
-uv run python -m harness.sweep 2000 --miscalibrated
-uv run python -m harness.calibration                # is it as sure as it should be?
-uv run python -m harness.calibration --sweep        # the evidence weight, measured
-```
+---
+
+## 5. Edge cases
+
+Every one of these is exercised by a test, and most were found by the generative sweep or by
+probing rather than anticipated. The ten below are the ones where the handling was not obvious;
+the rest are in `tests/test_end_to_end.py` and `tests/test_simulation.py`.
+
+| Case | What happens, and why |
+|---|---|
+| **The batch list is empty** (warehouse system down) | Treated as *no information*, not as "no batch matches". Reading an empty list as a rejection suppressed the reused-box explanation fiftyfold and left the agent 99.996% sure of one unverified reading |
+| **No evidence survives at all** | The candidate list is just the catch-all. It still weighs five options and holds the stock (£5.12) rather than escalating (£29.50) — and with no batch list there is no date it can stand behind, so the hold is left *undated*. Undated stock cannot be picked, so being ignorant is safe |
+| **Quantity of zero or less** | Refused at the intake boundary. A negative quantity flips the sign of every harm term, so the *most* damaging action becomes the cheapest. At −5 units the hero case filed the stock as the label claimed |
+| **The customer repacks** | Their labels are wrong far more often, *and* "you cannot return more than we sent you" stops being a rule, because they merge stock across deliveries. Applying it anyway ruled out the true batch precisely for the customers who make cases hard |
+| **Records are stale** | Recent shipments are missing by definition, so the chance the answer is not on the list rises. Ignoring that once had the agent file an impostor at 99.96% |
+| **Code is incomplete** (torn corner) | The fragment is used as a prefix, so every known batch whose code starts with it becomes a candidate. Without this the true answer would often never be on the list at all |
+| **A code that matches no real batch** | Recorded as rejected, its weight going to the catch-all. An invented or misread code cannot win |
+| **The answer appears only in prose** | A note saying *"inner cases stamped B-2296"* is invisible to a database query. The model reads it out, code checks the batch is real, and it becomes a candidate with evidence behind it |
+| **Stock held with no expiry date** | Cannot be picked, because first-expired-first-out cannot rank what it cannot date, so it carries no expiry risk. The picker really does skip it and a test says so — the cost model depends on it |
+| **Evidence that explains nothing** | Fifty rounds of it still leaves a valid distribution. The arithmetic is in log space with a floor, so nothing underflows |
 
 ---
 
-## 5. Honest limits
+## 6. Key design decisions
 
-- **The reliability numbers are hand-set.** They are in `config/reliability.yaml` and can be
-  argued with, but they are not measured, and they are load-bearing for the hero case. The
-  measured cost of this is the gap between 0.20% dangerous outcomes in the calibrated world and
-  2.05% in the miscalibrated one.
-- **The agent is overconfident by about a factor of two.** It claims a 1.8% error rate and has
-  a 3.5% one. The evidence weight improves its *decisions* without fixing this; the fix needs a
-  model of which sources share what information, not one scalar.
-- **It is risk-neutral.** A certain £4,000 loss and a 1-in-100 chance of £400,000 are the same
-  to it. A food business would not agree.
-- **Evidence nobody anticipated is ignored.** A temperature log has no likelihood function, so
-  it has no effect.
-- **Its value has an upper bound in return size.** Above roughly a hundred units on the hero
-  case, a person costs less than the risk left after a lookup, so the agent stops buying
-  information. Where that point sits is set by `human_error_rate` — another hand-set figure.
-
----
-
-## 6. Edge cases, and what happens
-
-Everything below is exercised by a test. Most of them were found the hard way — by the
-generative sweep, or by probing — rather than anticipated.
-
-### The evidence is missing or broken
-
-| Case | What happens |
-|---|---|
-| **Label unreadable** — water damage, heavy glare | No code, so the label likelihood is flat across candidates. It contributes nothing rather than contributing noise |
-| **Label reader itself is down** | Same, but the failure is recorded as a symptom so the reliability model knows which bucket applies |
-| **Check digit fails** | The characters do not add up, so *something* was misread. The confusion table decides which real codes could have garbled into what was read |
-| **Code is incomplete** — torn corner | The fragment is used as a prefix: every known batch whose code starts with it becomes a candidate. Without this the true answer would often never be on the list |
-| **Label names a code that is not a real batch** | Recorded as `rejected` and its weight goes to the catch-all. An invented or misread code cannot win |
-| **Warehouse records time out** | No records *and no batch list*. The agent still has the label, and a legible code becomes an unverified candidate rather than being thrown away |
-| **Records are stale** — replica behind | Recent shipments are missing by definition, so the chance the answer is not on the list rises. Ignoring this once had the agent file an impostor at 99.96% |
-| **Records contradict themselves** | Treated as a corrupted-source symptom, which is a different reliability bucket from a slow one |
-| **A paid lookup is unavailable** | Priced as buying nothing. The agent does not pay for a source that cannot answer |
-| **No evidence at all survives** | The candidate list is just the catch-all, at 100%. It still weighs five options and holds the stock (£5.12) rather than escalating (£29.50). With no batch list there is no date it can stand behind, so the hold is left *undated* — which means it cannot be picked at all, and carries no expiry risk. Being ignorant safely |
-
-### The stock is not what the paperwork implies
-
-| Case | What happens |
-|---|---|
-| **A reused outer box** — the label is genuine but on the wrong contents | This is the hero case. "Wrong label" is one of three states the label channel can be in, so a perfectly legible code can still be disbelieved |
-| **The customer repacks** | Their labels are wrong far more often, *and* "you cannot return more than we sent you" stops being a rule — they merge stock across deliveries. Applying it anyway ruled out the true batch precisely for the customers who make cases hard |
-| **Cross-docked or transferred stock** | Never appears in our shipment records at all. The record-completeness rules are switched off, and the catch-all's share of the prior rises |
-| **The answer appears only in prose** | A note saying *"inner cases stamped B-2296"* is invisible to a `SELECT`. The model reads it out, code checks the batch is real, and it becomes a candidate with evidence behind it |
-| **A batch that could not have been in that shipment** | Cleared quality control after the lorry left, or was never allocated to that customer. Ruled out — but never to exactly zero, because the registry can be wrong too |
-
-### Degenerate inputs
-
-| Case | What happens |
-|---|---|
-| **Quantity of zero or less** | Refused at the intake boundary. A negative quantity flips the sign of every harm term, so the *most* damaging action becomes the cheapest and the agent picks it confidently. At −5 units the hero case filed the stock as the label claimed |
-| **One unit** | Decided normally, and it will sometimes file the wrong batch — an £8.53 review is not worth spending on a single £11.40 unit. It still never records an expiry *later* than the truth |
-| **Thousands of units** | Also decided normally. Above roughly a hundred units on the hero case it stops paying for lookups, because the risk left over after one still exceeds what a person costs |
-| **A note naming a batch that does not exist** | Rejected, weight to the catch-all. Same treatment as an invented label code |
-| **Evidence that explains nothing** — every candidate near zero | Fifty rounds of it leaves a valid distribution. Arithmetic is in log space with a floor, so nothing underflows to `nan` |
-| **The batch list is empty** | Treated as *no information*, not as "no batch matches". Reading an empty list as a rejection suppressed the reused-box explanation fiftyfold and left the agent 99.996% sure of a single unverified reading |
-
-### Stock record and simulation
-
-| Case | What happens |
-|---|---|
-| **A decision that turns out wrong** | The row stays in the log and a new one puts the stock back. History is never rewritten; `UPDATE` and `DELETE` are blocked by database triggers |
-| **Stock held with no expiry date** | Cannot be picked at all — first-expired-first-out cannot rank what it cannot date — so it carries no expiry risk. The picker really does skip it, and a test says so |
-| **Two returns held at the same position** | They pool. A pick is split across what is really there in proportion, not in name order, which would quietly ship one batch before another |
-| **A hold written off before anyone reviews it** | Handled rather than crashing. It is a real cost of dating stock conservatively, and it is why holding everything is expensive |
-| **An escalation** | Still posted to the ledger. Stock a person is looking at is real stock in a real place, and a person resolves it after three days — right 99% of the time, not always |
-
----
-
-## 7. Key design decisions
+Each of these was a choice with a cost. The alternatives considered and why they were rejected
+are in [architecture-options.md](./architecture-options.md); this is the short version.
 
 **Keep a distribution, not a best guess.** The agent's output is a probability for every
 candidate that sums to one, including a catch-all for "something nobody listed". A single best
@@ -602,9 +505,8 @@ everything downstream and cannot leave two numbers disagreeing.
 so the exact value at which a decision flips can be solved for directly. That is more useful
 than sampling around a guess, and it is what the demo's sensitivity table shows.
 
-**Test properties on cases nobody wrote.** Every bug in this project hid behind hand-written
-cases added once the code could already handle them. The generative harness asserts what must
-never happen, in a world calibrated to the agent's beliefs and one deliberately not.
+**Test properties on cases nobody wrote.** See §4 — this is the decision that found most of the
+bugs in this repository.
 
 **Discount evidence for not being independent.** Multiplying likelihoods assumes the sources
 are independent given the batch, and they are not — a reused box carries a genuine label of a
@@ -618,58 +520,17 @@ prove nothing.
 
 ---
 
-## 9. With more time
+## 7. What it does not do, and what I would do next
 
-In the order I would actually do them.
+Each limitation with the fix I would actually reach for, in the order I would do them.
 
-**Fix the calibration properly.** The agent is overconfident by about a factor of two, and the
-single evidence weight improves its *decisions* without fixing that. The real fix is a model of
-*which* sources share *what* information — a reused box, a stale replica and a repacking
-customer are not independent symptoms, they are three views of one underlying state. That is a
-joint likelihood rather than a scalar, and it is the change most likely to move every number
-here.
-
-**Learn the reliability figures instead of setting them.** They sit in `config/reliability.yaml`
-as Dirichlet counts precisely so they *could* be updated as returns resolve, and nothing does
-it. Every escalation is a labelled example arriving for free. This would also remove the
-biggest stated caveat in the whole project.
-
-**Make the replenishment realistic.** The simulation reorders to a fixed level with no
-forecasting, which writes off about a tenth of everything received. It is identical across
-policies so the comparison holds, but it swamps the absolute figures and forces every result to
-be quoted above a floor. A demand forecast would make the pound numbers mean something on their
-own.
-
-**Weight the tail.** The agent is risk-neutral: a certain £4,000 loss and a one-in-a-hundred
-chance of £400,000 are the same to it. No food business would agree. This is a small change to
-the same arithmetic and I would want it before anyone acted on the output.
-
-**Widen the perception evidence.** Eight recorded label readings and eight notes, only one of
-which contains a lot code. The *use* of an extracted code is measured across hundreds of
-generated cases; the extraction itself is not. More images, more notes, and a second reader
-that fails differently would let the reliability model earn its buckets.
-
-**Let a return split across batches.** Real partial returns often contain two. The whole design
-assumes one answer per return, and relaxing that changes the candidate space rather than the
-plumbing — which is why it was cut, and why it is a real limitation rather than an oversight.
-
-**Handle evidence nobody anticipated.** A delivery-note photo or a temperature log has no
-likelihood function, so it has no effect at all. A model-driven agent would at least use it.
-The deliberate trade was a testable design over a more capable untested one; with more time I
-would want a way to take a new source without rebuilding the belief.
-
----
-
-## 10. Layout
-
-```
-world/       ground truth: warehouse, batches, label images   (agent/ must not import)
-services/    evidence sources, each able to fail on its own
-agent/       candidates, belief, constraints, value of information, policy, loop, trace
-ledger/      append-only stock movements, and drift against truth
-downstream/  demand, first-expired-first-out picking, the 540-day simulation
-harness/     generated cases, properties, sweeps, policies, the counterfactual
-demo/        the screen (panels.py holds the arithmetic, app.py only renders)
-config/      cost basis, reliability counts, the 12 recorded cases
-artifacts/   label images, decision traces, committed harm figures
-```
+| Limitation | What I would do |
+|---|---|
+| **Overconfident by about a factor of two.** It claims a 1.8% error rate and has a 3.5% one. The evidence weight improves its *decisions* without fixing this | Model *which* sources share *what* information. A reused box, a stale replica and a repacking customer are not independent symptoms — they are three views of one state. That is a joint likelihood, not the single scalar it uses now, and it is the change most likely to move every number here |
+| **The reliability figures are hand-set**, in `config/reliability.yaml`. Arguable, unmeasured, and load-bearing. The measured cost is the gap between 0.20% dangerous outcomes in the calibrated world and 2.05% in the miscalibrated one | Learn them. They are already stored as counts precisely so they *could* update as returns resolve, and nothing does it. Every escalation is a labelled example arriving for free |
+| **It is risk-neutral.** A certain £4,000 loss and a 1-in-100 chance of £400,000 are the same to it | Weight the tail. A small change to the same arithmetic, and I would want it before anyone acted on the output |
+| **Its value has a ceiling in return size.** Above roughly a hundred units a person costs less than the risk left after a lookup, so it stops buying information. Where that sits is set by `human_error_rate` — another hand-set number | Falls out of learning the reliability figures above, plus a better model of what a reviewer actually costs at volume |
+| **Evidence nobody anticipated is ignored.** A temperature log has no likelihood function, so it has no effect | A way to take a new source without rebuilding the belief. The deliberate trade was a testable design over a more capable untested one |
+| **Perception rests on eight recorded readings**, only one of which contains a lot code. The *use* of an extracted code is measured across hundreds of generated cases; the extraction itself is not | More images and notes, and a second reader that fails differently, so the reliability model earns its buckets |
+| **A return cannot split across two batches.** Real partial returns often do | Relax it. This changes the candidate space rather than the plumbing, which is why it was cut — a real limitation rather than an oversight |
+| **The absolute pound figures are not a business case.** They are dominated by write-off from a replenishment rule with no forecasting | Add a demand forecast, so the numbers mean something without being quoted above a floor |

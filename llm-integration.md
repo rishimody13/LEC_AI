@@ -1,6 +1,6 @@
 # Where the model is used, and where it is not
 
-**Repo:** `LEC_AI` · **Progress:** [status.md](./status.md)
+**Start here:** [README.md](./README.md) · **Progress:** [status.md](./status.md)
 
 ## The short version
 

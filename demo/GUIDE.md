@@ -1,7 +1,6 @@
 # Reading the screen
 
 **Repo:** [README.md](../README.md) · **Progress:** [status.md](../status.md)
-· **Video script:** [SCRIPT.md](./SCRIPT.md)
 
 ```bash
 uv sync --extra demo
