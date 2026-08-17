@@ -47,19 +47,19 @@
           "action": "gather batch_registry",
           "expected_cost_gbp": 0.39,
           "exposure": {},
-          "fee_gbp": 0.39
+          "fee_gbp": 0.3
         },
         {
           "action": "gather batch_registry+shipment_ledger",
           "expected_cost_gbp": 0.79,
           "exposure": {},
-          "fee_gbp": 0.79
+          "fee_gbp": 0.7
         },
         {
           "action": "gather shipment_ledger",
           "expected_cost_gbp": 1.47,
           "exposure": {},
-          "fee_gbp": 1.47
+          "fee_gbp": 0.4
         },
         {
           "action": "commit B-2293 -> C-04-03",

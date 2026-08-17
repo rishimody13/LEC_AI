@@ -66,7 +66,7 @@ class Trace:
                         "action": o.action.label,
                         "expected_cost_gbp": round(o.total, 2),
                         "exposure": {k: round(v, 3) for k, v in o.cost.exposure.items()},
-                        "fee_gbp": round(o.cost.fixed, 2),
+                        "fee_gbp": round(o.fee, 2),
                     }
                     for o in sorted(choice.options, key=lambda o: o.total)
                 ],

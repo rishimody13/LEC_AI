@@ -118,6 +118,7 @@ def as_priced_actions(options: list[Option], quantity: int) -> list[Priced]:
                 action=Action(kind=Kind.GATHER, tools=o.tools),
                 cost=LinearCost(fixed=o.fee + o.expected_after),
                 total=o.fee + o.expected_after,
+                fee=o.fee,
             )
         )
     return out

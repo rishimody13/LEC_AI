@@ -63,19 +63,19 @@
           "action": "gather batch_registry",
           "expected_cost_gbp": 21.81,
           "exposure": {},
-          "fee_gbp": 21.81
+          "fee_gbp": 0.3
         },
         {
           "action": "gather shipment_ledger",
           "expected_cost_gbp": 21.91,
           "exposure": {},
-          "fee_gbp": 21.91
+          "fee_gbp": 0.4
         },
         {
           "action": "gather batch_registry+shipment_ledger",
           "expected_cost_gbp": 22.21,
           "exposure": {},
-          "fee_gbp": 22.21
+          "fee_gbp": 0.7
         },
         {
           "action": "segregate -> H-01-01",

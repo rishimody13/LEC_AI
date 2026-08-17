@@ -81,6 +81,12 @@ class Priced:
     action: Action
     cost: LinearCost
     total: float
+    #: What this action costs to take, before any harm it risks. Only a lookup
+    #: has one. Kept separate from `cost.fixed` because a gather's LinearCost
+    #: carries the fee *plus* what we expect to spend afterwards - the two are
+    #: added so it sits on the same scale as committing, and reporting that sum
+    #: as "the fee" showed a 30p lookup costing £28.
+    fee: float = 0.0
 
 
 #: A win by less than this share of the cheapest option is called fragile. At
@@ -391,7 +397,7 @@ def choose(options: list[Priced], costs: CostModel) -> Choice:
     for o in options:
         o.total = o.cost.total(costs)
 
-    ranked = sorted(options, key=lambda o: (o.total, o.cost.fixed))
+    ranked = sorted(options, key=lambda o: (o.total, o.fee))
     chosen = ranked[0]
     choice = Choice(chosen=chosen, options=options)
 

@@ -113,7 +113,7 @@ def cost_pane(decision: panels.CostPanel) -> None:
 
 
 def consequence_pane(consequence: panels.ConsequencePanel) -> None:
-    st.subheader("What it costs later")
+    st.subheader("What this decision costs later")
 
     left, right = st.columns(2)
     left.metric("Filed as", consequence.assigned_batch or "not filed")
@@ -135,7 +135,16 @@ def consequence_pane(consequence: panels.ConsequencePanel) -> None:
         st.caption("Run `uv run python -m harness.counterfactual 600` for the simulation.")
         return
 
-    st.write(f"**Over {harm['seeds']} simulated runs of {harm['days']} days each:**")
+    # Everything below is about the policy as a whole, not the case on screen.
+    # It is the same for every case, and saying so is the difference between a
+    # figure and a misleading one.
+    st.divider()
+    st.subheader("How the policy does overall")
+    st.caption(
+        f"**Not about this return.** These are whole-operation figures from "
+        f"{harm['seeds']} simulated runs of {harm['days']} days each, and they are identical "
+        f"whichever case you are looking at above."
+    )
     st.dataframe(
         pd.DataFrame(
             [
@@ -154,9 +163,12 @@ def consequence_pane(consequence: panels.ConsequencePanel) -> None:
     if against:
         e = against["expired_units"]
         st.metric(
-            "Expired units avoided against trusting the label",
-            f"{-e['mean']:.0f} per run",
-            help=f"95% interval [{-e['high']:.0f}, {-e['low']:.0f}], paired on every seed",
+            "Expired units avoided per simulated run, agent vs trusting the label",
+            f"{-e['mean']:.0f}",
+            help=(
+                f"95% interval [{-e['high']:.0f}, {-e['low']:.0f}], paired on every seed. "
+                f"A whole-operation average over {harm['seeds']} runs, not this return."
+            ),
         )
 
 

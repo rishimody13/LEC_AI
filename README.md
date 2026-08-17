@@ -7,7 +7,7 @@
 
 ```bash
 uv sync --extra dev --extra demo
-uv run pytest                              # 687 tests
+uv run pytest                              # 688 tests
 uv run streamlit run demo/app.py           # the screen
 uv run python -m harness.sweep 2000        # the agent against cases nobody wrote
 uv run python -m harness.counterfactual 600  # the harm, measured
@@ -55,7 +55,7 @@ and compared, and the cheapest wins.
 | R6 | Trust, pay to check, or escalate | All four actions win somewhere |
 | R7 | Assign stock without causing drift | `ledger/` — append-only, reversible, drift measured against truth |
 | R8 | Prove the harm, measured | 600 paired 540-day simulations: **24% fewer expired units** than trusting the label |
-| R9 | Working code | 687 tests, ruff and mypy strict clean, runs offline |
+| R9 | Working code | 688 tests, ruff and mypy strict clean, runs offline |
 | R10 | A case where the obvious answer is wrong | S4, and the demo says so on screen |
 
 ---
@@ -346,7 +346,7 @@ there.
 
 ## 4. Testing
 
-687 tests. The important distinction is between the two kinds:
+688 tests. The important distinction is between the two kinds:
 
 | | recorded cases | generated cases |
 |---|---|---|

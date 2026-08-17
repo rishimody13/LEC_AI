@@ -376,8 +376,12 @@ def test_the_demo_screen_renders_every_pane():
     assert not app.error, [e.value for e in app.error]
 
     panes = {s.value for s in app.subheader}
-    assert {"The carton", "What it might be", "What it costs later"} <= panes
+    assert {"The carton", "What it might be", "What this decision costs later"} <= panes
     assert any(s.startswith("Decision:") for s in panes), "no cost table on screen"
+    assert "How the policy does overall" in panes, (
+        "the whole-operation figures must be a separate, labelled section - next to a single "
+        "return they read as a claim about that return"
+    )
 
     labels = {m.label for m in app.metric}
     assert {"Units returned", "Reader confidence", "Filed as", "Really was"} <= labels
@@ -438,7 +442,7 @@ def test_the_screen_offers_both_kinds_of_case():
     app.sidebar.radio[0].set_value(options[1]).run()
     assert not app.exception, [str(e) for e in app.exception]
     panes = {s.value for s in app.subheader}
-    assert {"The carton", "What it might be", "What it costs later"} <= panes
+    assert {"The carton", "What it might be", "What this decision costs later"} <= panes
     assert any("made up a moment ago" in i.value for i in app.info)
 
 
@@ -557,3 +561,25 @@ def test_the_model_earns_its_place_on_cases_nobody_wrote():
     assert had >= 5, f"only {had} generated cases had a lot code in the note"
     assert changed > 0, "the extracted lot code changed no decision anywhere: it is dead weight"
     assert rescued > broke, f"it got {rescued} right and {broke} wrong"
+
+
+def test_a_lookup_fee_is_the_fee_and_not_the_whole_cost():
+    """The screen shows both, and they mean different things.
+
+    A gather action's LinearCost carries the fee *plus* what we expect to spend
+    afterwards, so the two are on the same scale as committing. Reporting that
+    sum as "the fee" showed a 30p lookup costing £28.
+    """
+    from agent.harm import load_costs
+
+    prices = load_costs().prices
+    screen = panels.build("S4", COSTS, RELIABILITY)
+    gathers = [o for d in screen.decisions for o in d.options if o.action.startswith("gather")]
+    assert gathers, "S4 must offer at least one lookup"
+    for option in gathers:
+        tools = option.action.removeprefix("gather ").split("+")
+        assert option.fee_gbp == pytest.approx(sum(prices[t] for t in tools))
+        assert option.fee_gbp < option.expected_cost_gbp
+
+    terminal = [o for d in screen.decisions for o in d.options if not o.action.startswith("gather")]
+    assert all(o.fee_gbp == 0.0 for o in terminal), "only a lookup costs anything to take"

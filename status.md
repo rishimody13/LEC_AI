@@ -24,7 +24,7 @@ P7 demo screen  [####################] done
 P8 video        [                    ] next
 ```
 
-**Current state:** 687 tests pass, ruff clean, mypy strict clean. Everything runs offline.
+**Current state:** 688 tests pass, ruff clean, mypy strict clean. Everything runs offline.
 
 Building the ledger found four real faults, all of them in the direction that ships expired
 stock. They are written up under "what the ledger found" below, each with a named regression
@@ -82,7 +82,7 @@ decision produced, so the trace and the stock record are the same document.
 |---|---:|---|
 | `test_generalises.py` | 203 | Properties across 1-400 units on the hand-written cases |
 | `test_harm_is_real.py` | 12 | The R8 proof: policies compared over 18 months, with intervals |
-| `test_end_to_end.py` | 115 | Image to shelf, the demo screen, and uncertainty probed hard |
+| `test_end_to_end.py` | 116 | Image to shelf, the demo screen, and uncertainty probed hard |
 | `test_simulation.py` | 26 | The simulator itself: picking rules, truth tracking, scoring |
 | `test_ledger.py` | 109 | The stock record: append-only, conserved, reversible, and its drift |
 | `test_sweep.py` | 49 | The agent against generated cases nobody wrote |
@@ -99,7 +99,7 @@ decision produced, so the trace and the stock record are the same document.
 | `test_wms_client.py` | 8 | Each warehouse fault leaves the right symptom |
 | `test_coding.py` | 5 | Check digits, including the exhaustive single-digit proof |
 | `test_isolation.py` | 4 | Neither `agent/` nor `ledger/` can import ground truth |
-| **Total** | **687** | |
+| **Total** | **688** | |
 
 ---
 

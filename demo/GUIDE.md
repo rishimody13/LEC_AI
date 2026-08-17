@@ -23,9 +23,11 @@ Four panes. Read them clockwise from the top left.
 │  confidence, check digit │  candidate, after each    │
 │  damage symptoms         │  piece of evidence        │
 ├──────────────────────────┼──────────────────────────┤
-│  DECISION 1 & 2          │  WHAT IT COSTS LATER     │
-│  every action, priced,   │  filed vs truth, drift,   │
-│  the winner, the margin  │  the 600-run simulation   │
+│  DECISION 1 & 2          │  WHAT THIS COSTS LATER   │
+│  every action, priced,   │  filed vs truth, drift    │
+│  the winner, the margin  │  ── then, separately, ──  │
+│                          │  how the policy does      │
+│                          │  overall (not this case)  │
 └──────────────────────────┴──────────────────────────┘
 ```
 
@@ -70,6 +72,8 @@ would cost in expected pounds, the fee it would pay, and a tick against the one 
   a cost figure somebody chose rather than on the evidence, and the screen says so instead of
   presenting a coin flip as a clear call. Six of the twelve recorded cases are close calls;
   all six are the same choice — escalate, or pay 30p for a lookup.
+- **Expected cost** is the harm risked plus any fee; **fee** is only what the action costs to
+  take, and only a lookup has one. Section 4 sets the two out in full.
 - **The sensitivity table** below says how far one cost figure would have to move to change the
   answer. If it is empty, no single figure can be moved to a sensible value that would flip it.
 
@@ -82,9 +86,10 @@ The immediate consequence: what the stock was filed as, what it really was, and 
 leaves in the record. Green means no drift at all. Red means the recorded expiry is wrong, and
 by how many days.
 
-Below that, the committed simulation: six policies over 600 runs of 540 days each. The metric
-at the bottom — expired units avoided against trusting the label — is the headline result, with
-its confidence interval in the tooltip.
+Below a divider, in its own section, the committed simulation: six policies over 600 runs of
+540 days each. **That block is not about the case on screen** — it is a whole-operation average
+and is identical whichever case you are looking at. It is separated and labelled for exactly
+that reason; sitting next to a single return it would read as a claim about that return.
 
 Expand **"stock movements this decision caused"** to see the two ledger rows: the receipt, and
 the placement, each naming the decision that caused it. That link is what makes any wrong
@@ -173,7 +178,132 @@ Same seed, same case, every time — so a demo can be rehearsed.
 
 ---
 
-## 4. Filming notes
+## 4. Reference — every field on the screen
+
+### Expected cost vs fee (bottom left)
+
+Two different things, and the distinction is the whole design.
+
+- **Expected cost £** — everything the action is expected to cost, in pounds: the harm it
+  risks, weighted by how likely each candidate is, *plus* any fee. This is the number the
+  agent compares, and the cheapest one always wins.
+- **Fee £** — what the action costs to *take*, before any harm. Only a lookup has one:
+  **£0.30** for the batch registry, **£0.40** for the shipment ledger, £0.70 for both.
+  Committing, holding and escalating are all £0.00 to take — their cost is entirely the harm
+  they risk.
+
+So a row reading `gather batch_registry · expected £28.11 · fee £0.30` means: pay 30p now, and
+expect to be £28.11 worse off in total once the consequences of whatever you do next are
+priced in. Escalating at £29.50 with a £0.00 fee costs nothing to do and £29.50 in expected
+consequences — mostly the analyst's time and the share of returns a person still gets wrong.
+
+The **exposure** behind each row is in the trace (`artifacts/traces/*.json`): how many units of
+each kind of harm the action is exposed to, before those units are priced.
+
+### The evidence rows (top right)
+
+One row per update, in the order they were applied. Not every case has all of them.
+
+| Row | What it is | Needs a lookup? |
+|---|---|---|
+| `records` | Shipment records from the warehouse system — what we think we sent this customer | no |
+| `label` | The carton label: the characters read, the check digit, and the chance the label is genuine but on the wrong box | no |
+| `note` | A **lot code written out in prose** in the condition note. The one thing here no database query can do | no |
+| `constraints` | Physical impossibilities — a batch that cleared quality control *after* the shipment left cannot have been in it; a batch never allocated to this customer | yes (registry) |
+| `dispatch` | What the paid lookups say actually left the door | yes |
+| `note dates` | A print date stamped on the goods, matched against when each batch was made | yes (registry) |
+
+The first three are free and always applied. The last three only appear once the agent has
+decided a lookup is worth buying — which is why a case that escalates immediately shows only
+three rows.
+
+### Reader confidence (top left)
+
+**It is the vision model's own self-report**: a 0–1 number it returns alongside the characters,
+saying how sure it is of what it reported. Our code does not compute it.
+
+That matters, and it is worth saying plainly: a self-reported confidence is not a calibrated
+probability, and nothing here treats it as one. It is used as a **symptom**, not as a
+probability. Below 0.70 the reading is tagged `low_confidence`, which puts it in a different
+reliability bucket, and it is the *bucket* — not the number — that carries the failure rates
+the agent reasons with.
+
+The buckets, most specific first: `no_code_found`, `check_digit_failed`, `incomplete_code`,
+`low_confidence`, `clean_valid_repacker`, `clean_valid_standard`. The last two are the
+interesting pair: an identical, perfect reading is treated differently depending on whether the
+customer is known to repack goods, because that is what makes a genuine label end up on the
+wrong box.
+
+### "How far a cost would have to move to change this"
+
+The parameters are the entries in the cost table (see below). For each one:
+
+- **now_gbp** — what that figure is set to today.
+- **flips_at_gbp** — the value at which the chosen action stops being the cheapest.
+- **slack_x** — how many times the figure would have to change to get there.
+
+A row reading `expired_unit · now 48.00 · flips at 39.35 · slack 1.2x` means: shipping an
+expired unit is priced at £48, and if it were really below about £39 the agent would have
+chosen differently. A slack of 1.2× is thin; a slack of 10× means the decision does not rest on
+that number at all.
+
+An **empty table is a good sign** — it means no single cost figure can be moved to any sensible
+value that would change the answer.
+
+### The policies in "how the policy does overall"
+
+These are what the agent is measured against. Only the first four are things anyone could
+actually run.
+
+| Policy | What it does |
+|---|---|
+| **agent** | RECONCILE: probabilities, then the cheapest action |
+| **trust the label** | Read the box, believe the box. What most warehouses do, and right most of the time — which is exactly why its failures go unnoticed |
+| **trust the records** | Believe the warehouse system: file it as whatever we shipped most of |
+| **always escalate** | Send every return to a person. Not safe: a 1% human error rate applied to *every* return ships more expired stock than the agent does |
+| **always segregate** | Hold everything back under the earliest expiry any batch could have. Ships almost no expired stock and costs £59,000 more per run, because held stock is never on a pick face when it is needed |
+| **oracle** | **Not a policy anyone can run — it knows the answer.** It is the floor: the harm that remains when every identification is correct. Everything else is measured against it rather than against zero, because some cost is unavoidable |
+
+### The two paid lookups
+
+| | Batch registry (£0.30) | Shipment ledger (£0.40) |
+|---|---|---|
+| Answers | When was this batch released from quality hold, and which customers has it ever been allocated to? | What was physically scanned out of the door? |
+| Source | The manufacturing and allocation record | Door scans at dispatch |
+| Best used when | You need to rule a batch *out* — it could not have been in that shipment, or was never sent to this customer | The **warehouse system itself** is the suspect source, because door scans are unaffected by a stale replica |
+| Code | `services/batch_registry.py` | `services/shipment_ledger.py` |
+
+The registry is what settles the hero case: `B-2291` cleared quality control on 2026-06-28,
+*after* the shipment to that customer left on 2026-06-02. It could not have been in the box.
+
+### Where the cost table lives
+
+| | |
+|---|---|
+| `config/harm.yaml` | **The basis**, not the answers. Unit cost, gross margin, shelf life, analyst hourly rate, review minutes, human error rate, lookup prices. Each entry is tagged `definition`, `derived` or `judged` so you can see which are real judgements |
+| `agent/harm.py` | Works every figure the agent uses out of that basis, so changing a wage or a margin updates everything downstream. Also holds the break-even arithmetic behind the sensitivity table |
+
+The file checks its own relationships when it loads, so a bad edit fails immediately rather
+than quietly changing how the agent behaves. Editing it and watching the chosen action change
+on identical evidence is how `test_agent.py::test_no_default_branch` proves there is no
+hardcoded fallback.
+
+---
+
+## 5. Two things the screen deliberately does not do
+
+**The overall figures are not about the case on screen.** Everything under "how the policy does
+overall" is a whole-operation average over 600 simulated runs and is *identical whichever case
+you are looking at*. It is below a divider and labelled, because placed next to a single return
+it would read as a claim about that return.
+
+**Nothing on screen is recomputed for display.** Every number comes from the agent's own result
+object via `demo/panels.py`, which imports no Streamlit at all. There is a test asserting the
+panel data matches the agent's result field by field, so what is on camera cannot drift from
+what the agent actually did.
+---
+
+## 6. Filming notes
 
 - Opens on S4 so the film does not start on a menu.
 - Everything is precomputed and cached; switching case is instant, and there is no flicker to
