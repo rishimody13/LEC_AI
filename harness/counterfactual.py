@@ -126,6 +126,7 @@ def run(
         # Fresh oracle per run so its answers do not leak between seeds.
         if isinstance(policy, policies.Oracle):
             policy.truth = {}
+            policy.facts = {}
         out[policy.name] = [
             simulate.run(seed, policy, costs, reliability, config) for seed in seeds
         ]
@@ -137,9 +138,10 @@ def report(runs: dict[str, list[simulate.Metrics]], costs: CostModel) -> str:
     seeds = len(next(iter(runs.values())))
     lines.append(f"{seeds} seeds, {simulate.Config().days} days each, paired on every seed")
     lines.append("")
+    floor = sum(cost_of(m, costs) for m in runs["oracle"]) / seeds if "oracle" in runs else 0.0
     lines.append(
         f"{'policy':18} {'expired units':>14} {'stock-out':>10} {'escalations':>12} "
-        f"{'£ per run':>11}"
+        f"{'£ per run':>11} {'£ above floor':>14}"
     )
     for name, metrics in runs.items():
         expired = sum(m.expired_units_shipped for m in metrics) / seeds
@@ -147,8 +149,16 @@ def report(runs: dict[str, list[simulate.Metrics]], costs: CostModel) -> str:
         escalations = sum(m.escalations for m in metrics) / seeds
         money = sum(cost_of(m, costs) for m in metrics) / seeds
         lines.append(
-            f"{name:18} {expired:>14.1f} {stockout:>10.1f} {escalations:>12.1f} {money:>11,.0f}"
+            f"{name:18} {expired:>14.1f} {stockout:>10.1f} {escalations:>12.1f} "
+            f"{money:>11,.0f} {money - floor:>14,.0f}"
         )
+    lines.append("")
+    lines.append(
+        "The absolute £ column is dominated by ordinary warehouse costs - mostly writing off "
+        "opening stock that was already near its date - which are all but identical under "
+        "every policy. Only the last column and the paired differences below say anything "
+        "about the decisions."
+    )
 
     lines.append("")
     lines.append("agent against each alternative, paired by seed (negative = agent better)")

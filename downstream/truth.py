@@ -74,6 +74,10 @@ class TruthTracker:
             self.add(destination, batch, units)
         return moved
 
+    def positions(self) -> list[Position]:
+        """Every position holding anything."""
+        return [p for p, held in self._real.items() if sum(held.values())]
+
     def total(self, sku_id: str) -> int:
         return sum(
             units

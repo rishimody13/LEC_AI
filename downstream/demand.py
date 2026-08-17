@@ -25,8 +25,10 @@ class Order:
 
 #: Orders per weekday, and the spread around it. A warehouse does not ship a flat
 #: number every day, and a flat number would hide stock-outs that only happen on
-#: a busy day.
-MEAN_DAILY_UNITS = 120
+#: a busy day. The simulation passes its own figure; this is only a default, and
+#: it is kept equal to `simulate.Config.mean_daily_units` so the two cannot tell
+#: different stories.
+MEAN_DAILY_UNITS = 250
 SPREAD = 0.35
 
 #: Saturday and Sunday. Nothing ships.

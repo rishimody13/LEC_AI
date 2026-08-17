@@ -37,7 +37,7 @@
       "expired_units_shipped_per_run": 0.0,
       "stockout_units_per_run": 5.328333333333333,
       "escalations_per_run": 0.0,
-      "cost_gbp_per_run": 142559.72594117647
+      "cost_gbp_per_run": 138177.05294117646
     }
   },
   "agent_against": {
@@ -96,9 +96,9 @@
         "high": 328.5516666666667
       },
       "cost_gbp": {
-        "mean": 11291.882290849673,
-        "low": 9712.844209150328,
-        "high": 13004.28170261438
+        "mean": 15674.555290849674,
+        "low": 14098.86437254902,
+        "high": 17374.1354379085
       }
     }
   }

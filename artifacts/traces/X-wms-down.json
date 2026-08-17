@@ -28,16 +28,16 @@
     {
       "name": "who to believe",
       "belief": {
-        "B-2293": 0.9992,
-        "other": 0.0008
+        "B-2293": 0.9989,
+        "other": 0.0011
       },
       "options": [
         {
           "action": "segregate -> H-01-01",
-          "expected_cost_gbp": 5.15,
+          "expected_cost_gbp": 5.16,
           "exposure": {
             "deferred_review": 1.0,
-            "misattribution_unit": 0.033
+            "misattribution_unit": 0.042
           },
           "fee_gbp": 0.0
         },
@@ -70,37 +70,37 @@
         }
       ],
       "chosen": "segregate -> H-01-01",
-      "margin_gbp": 0.27,
-      "margin_share": 0.0526,
+      "margin_gbp": 0.26,
+      "margin_share": 0.0512,
       "fragile": false,
       "sensitivity": [
         {
           "parameter": "deferred_review",
           "now_gbp": 5.12,
-          "flips_at_gbp": 5.39,
+          "flips_at_gbp": 5.38,
           "slack_x": 1.1
         },
         {
           "parameter": "misattribution_unit",
           "now_gbp": 0.96,
-          "flips_at_gbp": 9.06,
-          "slack_x": 9.4
+          "flips_at_gbp": 7.22,
+          "slack_x": 7.5
         }
       ]
     },
     {
       "name": "where it goes",
       "belief": {
-        "B-2293": 0.9992,
-        "other": 0.0008
+        "B-2293": 0.9989,
+        "other": 0.0011
       },
       "options": [
         {
           "action": "segregate -> H-01-01",
-          "expected_cost_gbp": 5.15,
+          "expected_cost_gbp": 5.16,
           "exposure": {
             "deferred_review": 1.0,
-            "misattribution_unit": 0.033
+            "misattribution_unit": 0.042
           },
           "fee_gbp": 0.0
         },
@@ -115,21 +115,21 @@
         }
       ],
       "chosen": "segregate -> H-01-01",
-      "margin_gbp": 12.98,
-      "margin_share": 2.5196,
+      "margin_gbp": 12.97,
+      "margin_share": 2.5139,
       "fragile": false,
       "sensitivity": [
         {
           "parameter": "deferred_review",
           "now_gbp": 5.12,
-          "flips_at_gbp": 18.1,
+          "flips_at_gbp": 18.09,
           "slack_x": 3.5
         },
         {
           "parameter": "misattribution_unit",
           "now_gbp": 0.96,
-          "flips_at_gbp": 388.75,
-          "slack_x": 404.9
+          "flips_at_gbp": 308.28,
+          "slack_x": 321.1
         }
       ]
     }

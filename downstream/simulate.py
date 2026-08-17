@@ -24,7 +24,7 @@ best-before date. Every one of them traces back to a decision in step 2.
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, timedelta
 
 from agent.harm import CostModel
@@ -111,23 +111,12 @@ class Metrics:
     units_in: int = 0
     units_out: int = 0
     units_on_hand: int = 0
-    #: For each return that was filed wrongly, days between the decision and the
-    #: first unit of it leaving the building. This is the "fails silently" number.
-    silent_days: list[int] = field(default_factory=list)
     misfiled_returns: int = 0
     misfiled_units: int = 0
 
     @property
     def expired_rate(self) -> float:
         return self.expired_units_shipped / self.units_shipped if self.units_shipped else 0.0
-
-    @property
-    def median_silent_days(self) -> float:
-        if not self.silent_days:
-            return 0.0
-        ordered = sorted(self.silent_days)
-        mid = len(ordered) // 2
-        return float(ordered[mid])
 
 
 @dataclass
@@ -174,8 +163,17 @@ def run(
     reliability: ReliabilityModel,
     config: Config | None = None,
     calibrated: bool = True,
+    verify: bool = False,
 ) -> Metrics:
-    """Run one policy through one seeded six months."""
+    """Run one policy through one seeded eighteen months.
+
+    `verify` checks, at the end of every simulated day, that the ledger and the
+    truth tracker agree on *how many* units sit at each position. They disagree
+    about what those units are - that is the whole point - but a disagreement
+    about the count would mean the two halves of the simulation had drifted apart
+    and every figure it produces would be meaningless. It is off by default only
+    because it is O(positions) a day.
+    """
     config = config or Config()
     sku = generate.SKU_ID
 
@@ -238,7 +236,6 @@ def run(
 
     return_days = _return_days(stream, start, config)
     incoming: list[tuple[date, str, int]] = []
-    placed: dict[str, tuple[date, str, str | None, Position]] = {}
     pending: list[_Review] = []
     fresh_index = 0
 
@@ -290,7 +287,6 @@ def run(
             if answer != review.truth:
                 metrics.misfiled_returns += 1
                 metrics.misfiled_units += still_there
-                placed[review.return_id] = (today, review.truth, answer, landing)
         pending = [r for r in pending if r.due > today]
 
         # 2. returns ----------------------------------------------------------
@@ -308,6 +304,7 @@ def run(
             services = generate.StreamServices(case)
             if isinstance(policy, policies.Oracle):
                 policy.truth[return_id] = case.truth
+                policy.facts = {b.batch_id: (b.best_before, b.home_bin) for b in world.batches}
 
             decision = policy.decide(case.intake, services, costs, reliability)
             metrics.returns_handled += 1
@@ -331,9 +328,14 @@ def run(
                 metrics.escalations += 1
                 landing = Position(sku, "Q-01-01")
             else:
+                # The fallback bin must NOT come from `home_of`, which is ground
+                # truth. A policy that names a batch but cannot name a bin -
+                # because the warehouse system was down and it had no catalogue -
+                # would otherwise be handed the correct home bin for free, and
+                # the comparison would be measuring a hint the policy never had.
                 landing = Position(
                     sku,
-                    decision.bin_id or home_of.get(decision.batch_id or "", config.inbound_bin),
+                    decision.bin_id or config.inbound_bin,
                     Lot(decision.batch_id, decision.best_before),
                 )
             kind = Kind.RECLASSIFY if landing.lot != dock.lot else Kind.PUTAWAY
@@ -371,7 +373,6 @@ def run(
             if decision.batch_id is not None and decision.batch_id != case.truth:
                 metrics.misfiled_returns += 1
                 metrics.misfiled_units += case.intake.quantity
-                placed[return_id] = (today, case.truth, decision.batch_id, landing)
 
         # 3. orders ship ------------------------------------------------------
         for order in orders_by_day.get(today, []):
@@ -391,10 +392,6 @@ def run(
                 for batch_id, units in really.items():
                     if expiry_of.get(batch_id, today) < today:
                         metrics.expired_units_shipped += units
-                    for return_id, (when, truth, _filed, where) in list(placed.items()):
-                        if where == take.position and truth == batch_id:
-                            metrics.silent_days.append((today - when).days)
-                            del placed[return_id]
 
         # 4. write off what the record says has gone off ----------------------
         for position, units in list(book.balances().items()):
@@ -434,6 +431,9 @@ def run(
                 )
             )
 
+        if verify:
+            _agree(book, real, sku, today)
+
     metrics.stranded_units = sum(
         units
         for p, units in book.balances().items()
@@ -446,6 +446,20 @@ def run(
     book.check_balances()
     metrics.units_in, metrics.units_out, metrics.units_on_hand = book.flow(sku)
     return metrics
+
+
+def _agree(book: Ledger, real: TruthTracker, sku_id: str, today: date) -> None:
+    """The ledger and the shelf must hold the same number of units everywhere."""
+    believed = {p: n for p, n in book.balances().items() if p.sku_id == sku_id and n}
+    actual = {p: real.units_at(p) for p in set(believed) | set(real.positions())}
+    actual = {p: n for p, n in actual.items() if p.sku_id == sku_id and n}
+    if believed != actual:
+        wrong = {
+            str(p): (believed.get(p, 0), actual.get(p, 0))
+            for p in set(believed) | set(actual)
+            if believed.get(p, 0) != actual.get(p, 0)
+        }
+        raise AssertionError(f"on {today} the ledger and the shelf disagree: {wrong}")
 
 
 def _return_days(rng: random.Random, start: date, config: Config) -> dict[date, int]:

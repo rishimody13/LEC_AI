@@ -53,23 +53,23 @@
     {
       "name": "who to believe",
       "belief": {
-        "B-2288": 0.2222,
-        "B-2290": 0.1547,
-        "B-2291": 0.617,
-        "other": 0.006
+        "B-2288": 0.2238,
+        "B-2290": 0.1559,
+        "B-2291": 0.6134,
+        "other": 0.0069
       },
       "options": [
         {
           "action": "gather batch_registry",
-          "expected_cost_gbp": 25.25,
+          "expected_cost_gbp": 28.11,
           "exposure": {},
-          "fee_gbp": 25.25
+          "fee_gbp": 28.11
         },
         {
           "action": "gather batch_registry+shipment_ledger",
-          "expected_cost_gbp": 25.65,
+          "expected_cost_gbp": 28.51,
           "exposure": {},
-          "fee_gbp": 25.65
+          "fee_gbp": 28.51
         },
         {
           "action": "escalate",
@@ -88,71 +88,71 @@
         },
         {
           "action": "segregate -> H-01-01",
-          "expected_cost_gbp": 69.13,
+          "expected_cost_gbp": 71.08,
           "exposure": {
-            "wrong_zone": 0.994,
-            "shelf_waste_unit_day": 907.584,
-            "expired_unit": 0.254,
+            "wrong_zone": 0.993,
+            "shelf_waste_unit_day": 904.698,
+            "expired_unit": 0.29,
             "deferred_review": 1.0,
-            "misattribution_unit": 32.171
+            "misattribution_unit": 32.471
           },
           "fee_gbp": 0.0
         },
         {
           "action": "commit B-2288 -> A-07-02",
-          "expected_cost_gbp": 94.89,
+          "expected_cost_gbp": 96.35,
           "exposure": {
-            "shelf_waste_unit_day": 907.584,
-            "misattribution_unit": 64.827,
-            "wrong_zone": 0.772,
-            "expired_unit": 0.254
+            "shelf_waste_unit_day": 904.698,
+            "misattribution_unit": 64.621,
+            "wrong_zone": 0.769,
+            "expired_unit": 0.29
           },
           "fee_gbp": 0.0
         },
         {
           "action": "commit B-2290 -> A-07-05",
-          "expected_cost_gbp": 977.55,
+          "expected_cost_gbp": 985.56,
           "exposure": {
-            "expired_unit": 18.919,
-            "misattribution_unit": 70.493,
-            "wrong_zone": 0.839
+            "expired_unit": 19.089,
+            "misattribution_unit": 70.328,
+            "wrong_zone": 0.837
           },
           "fee_gbp": 0.0
         },
         {
           "action": "commit B-2291 -> C-04-01",
-          "expected_cost_gbp": 1563.22,
+          "expected_cost_gbp": 1576.09,
           "exposure": {
-            "expired_unit": 31.917,
-            "misattribution_unit": 31.663,
-            "wrong_zone": 0.377
+            "expired_unit": 32.181,
+            "misattribution_unit": 31.891,
+            "wrong_zone": 0.38
           },
           "fee_gbp": 0.0
         }
       ],
       "chosen": "gather batch_registry",
       "margin_gbp": 0.4,
-      "margin_share": 0.0158,
-      "fragile": false,
+      "margin_share": 0.0142,
+      "fragile": true,
       "sensitivity": []
     },
     {
       "name": "where it goes",
       "belief": {
-        "B-2288": 0.8457,
-        "B-2290": 0.1499,
+        "B-2288": 0.8359,
+        "B-2290": 0.1587,
         "B-2291": 0.0,
-        "other": 0.0044
+        "other": 0.0054
       },
       "options": [
         {
           "action": "commit B-2288 -> A-07-02",
-          "expected_cost_gbp": 24.95,
+          "expected_cost_gbp": 27.81,
           "exposure": {
-            "shelf_waste_unit_day": 176.307,
-            "misattribution_unit": 12.593,
-            "wrong_zone": 0.15,
-            "expired_unit": 0.185
+            "shelf_waste_unit_day": 186.621,
+            "misattribution_unit": 13.33,
+            "wrong_zone": 0.159,
+            "expired_unit": 0.225
           },
           "fee_gbp": 0.0
         },
@@ -167,59 +167,59 @@
         },
         {
           "action": "segregate -> H-01-01",
-          "expected_cost_gbp": 32.23,
+          "expected_cost_gbp": 35.15,
           "exposure": {
-            "wrong_zone": 0.996,
-            "shelf_waste_unit_day": 176.307,
-            "expired_unit": 0.185,
+            "wrong_zone": 0.995,
+            "shelf_waste_unit_day": 186.621,
+            "expired_unit": 0.225,
             "deferred_review": 1.0,
-            "misattribution_unit": 12.963
+            "misattribution_unit": 13.78
           },
           "fee_gbp": 0.0
         },
         {
           "action": "commit B-2290 -> A-07-05",
-          "expected_cost_gbp": 3488.64,
+          "expected_cost_gbp": 3450.54,
           "exposure": {
-            "expired_unit": 71.222,
-            "misattribution_unit": 71.037,
-            "wrong_zone": 0.846
+            "expired_unit": 70.445,
+            "misattribution_unit": 70.22,
+            "wrong_zone": 0.836
           },
           "fee_gbp": 0.0
         },
         {
           "action": "commit B-2291 -> C-04-01",
-          "expected_cost_gbp": 4105.5,
+          "expected_cost_gbp": 4103.49,
           "exposure": {
-            "expired_unit": 83.814,
-            "misattribution_unit": 83.629,
-            "wrong_zone": 0.996
+            "expired_unit": 83.774,
+            "misattribution_unit": 83.549,
+            "wrong_zone": 0.995
           },
           "fee_gbp": 0.0
         }
       ],
       "chosen": "commit B-2288 -> A-07-02",
-      "margin_gbp": 3.75,
-      "margin_share": 0.1502,
-      "fragile": false,
+      "margin_gbp": 0.88,
+      "margin_share": 0.0316,
+      "fragile": true,
       "sensitivity": [
         {
           "parameter": "misattribution_unit",
           "now_gbp": 0.96,
-          "flips_at_gbp": 1.26,
-          "slack_x": 1.3
+          "flips_at_gbp": 1.03,
+          "slack_x": 1.1
         },
         {
           "parameter": "expired_unit",
           "now_gbp": 48.0,
-          "flips_at_gbp": 32.05,
-          "slack_x": 1.5
+          "flips_at_gbp": 43.49,
+          "slack_x": 1.1
         },
         {
           "parameter": "human_review",
           "now_gbp": 8.53,
-          "flips_at_gbp": 4.79,
-          "slack_x": 1.8
+          "flips_at_gbp": 7.65,
+          "slack_x": 1.1
         }
       ]
     }
@@ -227,7 +227,9 @@
   "spend_gbp": 0.3,
   "outcome": "commit B-2288 -> A-07-02",
   "notes": [
-    "who to believe: no single cost figure can be moved to a sensible value that would change this. The decision does not rest on the cost table."
+    "who to believe: no single cost figure can be moved to a sensible value that would change this. The decision does not rest on the cost table.",
+    "who to believe: only \u00a30.58 (2.1%) ahead of 'escalate', which would lead somewhere different. A decision this close rests on a chosen parameter rather than on the evidence.",
+    "where it goes: only \u00a30.88 (3.2%) ahead of 'escalate', which would lead somewhere different. A decision this close rests on a chosen parameter rather than on the evidence."
   ],
   "stock_movements": [
     {

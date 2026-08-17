@@ -36,6 +36,10 @@ RELIABILITY = load_reliability()
 #: The committed headline figures come from a 600-seed run - see artifacts/.
 SEEDS = 200
 
+#: What the committed 600-seed figures say. Checked loosely, because the point is
+#: to notice a result that has moved, not to pin the number.
+HEADLINE_EXPIRED_REDUCTION = 0.10
+
 
 @pytest.fixture(scope="module")
 def runs() -> dict[str, list[simulate.Metrics]]:
@@ -85,8 +89,14 @@ def test_escalating_everything_is_not_safe(runs):
     treated review as a free correct answer this would be unbeatable, and the
     comparison would be rigged.
     """
-    escalate = [m for m in runs["always escalate"]]
-    assert sum(m.expired_units_shipped for m in escalate) > 0
+    worse = counterfactual.paired(
+        runs, "agent", "always escalate", lambda m: float(m.expired_units_shipped)
+    )
+    assert worse.high < 0, (
+        f"expected escalating everything to ship MORE expired stock than the agent, got "
+        f"{worse.mean_difference:.1f} [{worse.low:.1f}, {worse.high:.1f}]"
+    )
+    assert sum(m.expired_units_shipped for m in runs["always escalate"]) > 0
 
 
 def test_holding_everything_is_safe_and_useless(runs):
@@ -131,6 +141,21 @@ def test_the_harm_needs_a_long_horizon_to_appear():
         simulate.run(s, label, COSTS, RELIABILITY, long).expired_units_shipped for s in seeds
     )
     assert late > early * 2, f"180 days showed {early}, 540 days showed {late}"
+
+
+def test_the_reduction_is_worth_having(runs):
+    """A statistically real difference can still be trivially small.
+
+    The committed figure is a 22% reduction in expired units against trusting the
+    label. This checks the effect has not quietly shrunk to something that
+    survives a confidence interval but would not persuade anybody.
+    """
+    agent = sum(m.expired_units_shipped for m in runs["agent"])
+    label = sum(m.expired_units_shipped for m in runs["trust the label"])
+    assert label > 0
+    assert (label - agent) / label > HEADLINE_EXPIRED_REDUCTION, (
+        f"agent {agent}, trusting the label {label} - only {(label - agent) / label:.1%} better"
+    )
 
 
 @pytest.mark.parametrize("seed", [3, 6, 17])

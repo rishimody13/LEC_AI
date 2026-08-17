@@ -23,7 +23,7 @@ P7 demo screen  [                    ] next
 P8 video        [                    ]
 ```
 
-**Current state:** 545 tests pass, ruff clean, mypy strict clean. Everything runs offline.
+**Current state:** 572 tests pass, ruff clean, mypy strict clean. Everything runs offline.
 
 Building the ledger found four real faults, all of them in the direction that ships expired
 stock. They are written up under "what the ledger found" below, each with a named regression
@@ -37,13 +37,13 @@ really does went from 0.55% to 0.20%, and to zero for held stock.
 | S1 clean | commit B-2293 | £0.00 | yes | no |
 | S2 unreadable label | commit B-2293 | £0.30 | yes | no |
 | S3 nothing to go on | escalate | £0.00 | — | **yes** |
-| **S4 hero** | **commit B-2288** | **£0.30** | **yes** | no |
+| **S4 hero** | **commit B-2288** | **£0.30** | **yes** | **yes** |
 | S5 both sources degraded | escalate | £0.00 | — | **yes** |
 | S6 near-miss twins | escalate | £0.00 | — | **yes** |
-| S7 answer only in the note | escalate | £0.00 | — | no |
+| S7 answer only in the note | escalate | £0.00 | — | **yes** |
 | S8 corrupted, not unreadable | commit B-2290 | £0.30 | yes | no |
 | X label reader down | commit B-2293 | £0.30 | yes | no |
-| X warehouse timeout | segregate | £0.30 | — | no |
+| X warehouse timeout | segregate | £0.00 | — | no |
 | X contradictory rows | commit B-2293 | £0.30 | yes | no |
 | X paid lookup down | escalate | £0.00 | — | **yes** |
 
@@ -53,9 +53,16 @@ somewhere, so none is dead weight.
 **Two things this table does not say.** It never files stock under the wrong batch *at these
 quantities* — at one or two units it does, because a £8.53 review is not worth spending on a
 single £11.40 unit. What holds at every size is that it never records an expiry **later**
-than the truth, which is the direction that ships expired stock. And five of the twelve cases
-have a close first call, flagged in the trace as resting on a chosen parameter rather than on
-the evidence. All five are the same choice: escalate or pay £0.30 for a lookup.
+than the truth, which is the direction that ships expired stock. And **six** of the twelve
+cases have a close first call, flagged in the trace as resting on a chosen parameter rather
+than on the evidence.
+
+All six are the same choice: escalate, or pay £0.30 for a lookup. Five of them escalate by a
+margin of exactly £0.30 — the lookup fee itself — and S4 buys the lookup with escalation
+£0.58 behind it. That is the honest reading of the cost table rather than a defect: at these
+quantities a £0.30 fee and a £8.53 analyst are the same order of magnitude next to the harm
+at stake, so there is genuinely little to separate them, and the trace says so instead of
+presenting a coin-flip as a clear call.
 
 **S6 changed when the ledger was built.** It used to segregate. Holding stock is now dated at
 the earliest expiry any batch of the product has, which is the only date that is safe if the
@@ -73,7 +80,8 @@ decision produced, so the trace and the stock record are the same document.
 | File | Tests | What it covers |
 |---|---:|---|
 | `test_generalises.py` | 203 | Properties across 1-400 units on the hand-written cases |
-| `test_harm_is_real.py` | 11 | The R8 proof: policies compared over 18 months, with intervals |
+| `test_harm_is_real.py` | 12 | The R8 proof: policies compared over 18 months, with intervals |
+| `test_simulation.py` | 26 | The simulator itself: picking rules, truth tracking, scoring |
 | `test_ledger.py` | 109 | The stock record: append-only, conserved, reversible, and its drift |
 | `test_sweep.py` | 49 | The agent against generated cases nobody wrote |
 | `test_agent.py` | 34 | The agent end to end, including the no-default-branch check |
@@ -89,7 +97,7 @@ decision produced, so the trace and the stock record are the same document.
 | `test_wms_client.py` | 8 | Each warehouse fault leaves the right symptom |
 | `test_coding.py` | 5 | Check digits, including the exhaustive single-digit proof |
 | `test_isolation.py` | 4 | Neither `agent/` nor `ledger/` can import ground truth |
-| **Total** | **545** | |
+| **Total** | **572** | |
 
 ---
 
@@ -810,29 +818,29 @@ most reckless one, and it is why `X-wms-down` had stopped segregating.
 | | before P5 | after P5 |
 |---|---:|---:|
 | Cases where the record says the stock lasts longer than it does | 0.55% | **0.20%** |
-| Wrong-batch commits | 49 | 37 |
-| Units filed under the wrong batch | 17,028 | 13,170 |
+| Wrong-batch commits | 49 | 38 |
+| Units filed under the wrong batch | 17,028 | 13,702 |
 | Held stock dated later than the truth | not measured | **0** |
 
 ### What "units under the wrong batch" is, and why it is not small
 
-13,170 sounds alarming next to 4 dangerous cases. It is a different measurement and it needs
+13,702 sounds alarming next to 4 dangerous cases. It is a different measurement and it needs
 reading carefully.
 
-It is **unit-weighted, not case-weighted**. All 13,170 units come from exactly the same 37
+It is **unit-weighted, not case-weighted**. All 13,702 units come from exactly the same 38
 wrong commits — no other case contributes. Returns in the generated worlds run from 1 unit to
-about 1,200, so those 37 average 356 units each and the three largest contribute 3,505 between
-them. The case count and the unit count are the same fact stated at two scales.
+about 1,200, so those 38 average 361 units each and a handful of large returns dominate. The
+case count and the unit count are the same fact stated at two scales.
 
 Against the right denominator:
 
 | | units |
 |---|---:|
 | Returned across 2,000 cases | 727,176 |
-| Filed under a batch (the rest were held or escalated) | 326,615 |
-| **Filed under the wrong batch** | **13,170 — 4.0% of filed units** |
+| Filed under a batch (the rest were held or escalated) | 317,414 |
+| **Filed under the wrong batch** | **13,702 — 4.3% of filed units** |
 
-4% is roughly what the reliability model implies: it believes labels are wrong on about 6.6%
+4.3% is roughly what the reliability model implies: it believes labels are wrong on about 6.6%
 of returns (1% for ordinary customers, 17% for repackers, about a third of customers repack).
 The agent catches most of those and pays for the rest.
 
@@ -841,25 +849,22 @@ recorded expiry was wrong:
 
 | Recorded expiry vs the truth | units | what it costs |
 |---|---:|---|
-| **Earlier** — wastes shelf life | 12,243 (93%) | £0.96/unit of lost traceability |
+| **Earlier** — wastes shelf life | 12,775 (93%) | £0.96/unit of lost traceability |
 | Same date | 0 | — |
 | **Later** — ships expired stock | 927 (7%) | £0.96 + £48/unit |
 
 So 93% of the misattribution is on the harmless side of the expiry. That split is the design
 working: the agent cannot avoid an identification error rate, so it pushes the errors into the
-direction that only wastes money. The 7% costs £44,496 against the 93%'s £12,643 — 7% of the
+direction that only wastes money. The 7% costs £44,496 against the 93%'s £12,264 — 7% of the
 units, 78% of the cost.
 
-**Was committing worth it?** Measured on what actually happened, not on what the agent
-expected: those 1,116 commits cost £57,139 in misattribution and expired stock. Escalating all
-of them instead would have cost £87,911 — £9,523 of analyst time plus £78,388 from the 1% of
-returns a person still gets wrong. Committing was 35% cheaper.
-
-That comparison rests on one number. **If humans got it wrong less than 0.61% of the time
-rather than the assumed 1%, escalating everything would have beaten the agent** on these
-returns. The margin on `human_error_rate` is a factor of 1.6, which is not comfortable. It is
-the single figure the case for deciding at all rests on, and it is hand-set like the rest of
-`config/harm.yaml`.
+**Was committing worth it?** This was originally answered with a hand calculation. It is now
+answered properly by the P6 simulation, which runs "always escalate" as a policy over
+eighteen months rather than pricing it on paper — and the answer is yes: escalating every
+return ships **783 expired units against the agent's 293**, because a 1% human error rate
+applied to every single return beats a larger rate applied only to the hard ones. The paper
+version of this calculation has been removed rather than left to disagree with the
+simulation.
 
 ### The remaining failures
 
@@ -869,10 +874,10 @@ evidence anywhere names the truth. Believing a clean label from a customer whose
 wrong 1% of the time is correct, and being wrong 1% of the time is what that belief means.
 
 In the miscalibrated world — every fault equally likely, which is not what the model
-believes — 2,000 cases give 52 dangerous outcomes (2.6%), 148 wrong-batch commits, and again
-**zero** held returns dated later than the truth. That gap between 0.20% and 2.6% is the cost
-of the reliability numbers being hand-set rather than measured. It is now a number rather
-than an admission.
+believes — 2,000 cases give 41 dangerous outcomes (2.05%), 129 wrong-batch commits, and again
+**zero** held returns dated later than the truth. That gap between 0.20% and 2.05% is the
+cost of the reliability numbers being hand-set rather than measured. It is now a number
+rather than an admission.
 
 ### Are the faults fixed?
 
@@ -899,25 +904,27 @@ wasteful drift.
 
 ### Is the agent operating at the optimum?
 
-It was not. Asked whether the costs looked high, I measured the agent's calibration against
-2,000 generated cases with known answers, and it was **overconfident by a factor of two**: it
-said it was wrong 1.7% of the time and was actually wrong 3.3%.
+It was not, and it still is not fully. Asked whether the costs looked high, I measured the
+agent's calibration against 2,000 generated cases with known answers. It is **overconfident
+by a factor of two**: it says it is wrong 1.7% of the time and is actually wrong 3.3%.
+
+Reproduce with `uv run python -m harness.calibration`.
 
 | stated confidence | commits | said | actually right | gap |
 |---|---:|---:|---:|---:|
-| under 0.90 | 46 | 0.818 | 0.783 | −0.035 |
-| 0.90 – 0.99 | 224 | 0.961 | 0.911 | −0.050 |
-| 0.99 – 0.999 | 314 | 0.996 | 0.978 | −0.018 |
-| above 0.999 | 532 | 1.000 | 1.000 | 0.000 |
+| under 0.90 | 56 | 0.825 | 0.768 | −0.057 |
+| 0.90 – 0.99 | 232 | 0.962 | 0.922 | −0.040 |
+| 0.99 – 0.999 | 285 | 0.995 | 0.975 | −0.020 |
+| above 0.999 | 516 | 1.000 | 1.000 | +0.000 |
 
-Brier score 0.030. The revealing cut is not that table but this one — **the more evidence the
-agent gathers, the worse its calibration gets**:
+The revealing cut is not that table but this one — **the more evidence the agent gathers, the
+worse its calibration gets**:
 
 | evidence updates applied | commits | said | actually right | gap |
 |---|---:|---:|---:|---:|
-| 2 | 582 | 0.9897 | 0.9777 | −0.012 |
-| 4 | 426 | 0.9728 | 0.9554 | −0.017 |
-| 5 | 108 | 0.9905 | 0.9537 | −0.037 |
+| 2 | 545 | 0.9880 | 0.9780 | −0.010 |
+| 4 | 438 | 0.9721 | 0.9566 | −0.016 |
+| 5 | 106 | 0.9878 | 0.9340 | −0.054 |
 
 That is the signature of treating correlated sources as independent. Multiplying likelihoods
 assumes each source is independent once you know the batch, and they are not: **a reused
@@ -925,8 +932,8 @@ outer box carries a genuine label of a batch that genuinely went to that custome
 records and the registry agree with the label precisely when the label is misleading. Three
 confirmations, one fact.
 
-**The correction** is to weight each log-likelihood by less than one (`EVIDENCE_WEIGHT` in
-`agent/belief.py`). Measured on realised cost, not chosen:
+**The change** is to weight each log-likelihood by less than one (`EVIDENCE_WEIGHT` in
+`agent/belief.py`). Chosen on realised cost, not on calibration:
 
 | weight | £ per return (4,000 fresh seeds) | dangerous cases | overstated unit-days |
 |---|---:|---:|---:|
@@ -939,9 +946,25 @@ confirmations, one fact.
 Everything from 0.97 to 0.90 is **statistically indistinguishable** — the costs differ by
 under £1 against a 95% interval of about £15. All of them beat 1.0. 0.95 is the smallest
 correction the evidence supports, so it is the one taken; the honest claim is the band, not
-the number.
+the number. Reproduce with `uv run python -m harness.calibration --sweep`.
 
-Two cautions, stated rather than buried:
+**It did not fix the calibration.** This matters and it would be easy to imply otherwise:
+
+| | weight 1.0 | weight 0.95 |
+|---|---:|---:|
+| claimed error rate | 1.67% | 1.84% |
+| real error rate | 3.32% | 3.49% |
+| ratio | 1.99× | 1.90× |
+| Brier score | 0.0303 | 0.0314 |
+
+Conditional on committing, the agent is just as overconfident as before — the Brier score is
+marginally *worse*. What the weight changes is **which action gets chosen**: a flatter belief
+makes committing look riskier, so the agent commits a little less and holds or escalates a
+little more, and it avoids the expensive mistakes. Cost and safety improve; honesty about the
+probabilities does not. Fixing the calibration itself needs a model of *which* sources share
+*what*, not one scalar, and that is still open.
+
+Two further cautions, stated rather than buried:
 
 - **The cost intervals overlap** even against 1.0 (£77.60 ± 29.71 versus £56.11 ± 15.65). The
   per-seed cost is heavily skewed — most cases cost nothing, a few cost a great deal — so the
@@ -991,14 +1014,20 @@ construction and prove nothing.
 
 #### Results — 600 seeds, 540 days each, paired
 
-| policy | expired units | stock-out | escalations | £ per run |
-|---|---:|---:|---:|---:|
-| **agent** | **293.3** | 8.0 | 39.0 | **153,852** |
-| trust the label | 374.3 | 6.5 | 35.1 | 156,932 |
-| trust the records | 1,756.8 | 5.1 | 7.5 | 222,352 |
-| always escalate | 782.9 | 8.6 | 104.7 | 177,913 |
-| always segregate | 128.5 | 15.9 | 0.0 | 213,044 |
-| oracle (knows the answer) | 0.0 | 5.3 | 0.0 | 142,560 |
+| policy | expired units | stock-out | escalations | £ per run | £ above the floor |
+|---|---:|---:|---:|---:|---:|
+| **agent** | **293.3** | 8.0 | 39.0 | 153,852 | **15,675** |
+| trust the label | 374.3 | 6.5 | 35.1 | 156,932 | 18,755 |
+| trust the records | 1,756.8 | 5.1 | 7.5 | 222,352 | 84,175 |
+| always escalate | 782.9 | 8.6 | 104.7 | 177,913 | 39,736 |
+| always segregate | 128.5 | 15.9 | 0.0 | 213,044 | 74,867 |
+| oracle (knows the answer) | 0.0 | 5.3 | 0.0 | 138,177 | 0 |
+
+**Read the last column, not the one before it.** The absolute £ figure is 88% ordinary
+warehouse cost — mostly writing off opening stock that was already near its date — and is
+nearly identical under every policy. Against the whole figure the agent looks 2% better than
+trusting the label; against the part that decisions actually control, it is **16% better**.
+The paired differences below are unaffected either way, because the baseline cancels.
 
 Agent against each alternative, paired seed by seed, 95% bootstrap intervals. Negative means
 the agent is better:
@@ -1009,7 +1038,7 @@ the agent is better:
 | trust the records | −1,463.5 [−1,672.1, −1,262.8] | −68,501 [−75,945, −61,304] |
 | always escalate | −489.6 [−532.0, −448.1] | −24,061 [−26,083, −22,155] |
 | always segregate | +164.8 [+127.5, +202.8] | −59,193 [−62,811, −55,492] |
-| oracle | +293.3 [+260.3, +328.6] | +11,292 [+9,713, +13,004] |
+| oracle | +293.3 [+260.3, +328.6] | +15,675 [+14,099, +17,374] |
 
 **The headline: 22% fewer expired units than trusting the label, and cheaper, both intervals
 excluding zero.** The agent beats every runnable policy on both counts. It does not beat the

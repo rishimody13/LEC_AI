@@ -38,36 +38,36 @@
     {
       "name": "who to believe",
       "belief": {
-        "B-2293": 0.9962,
-        "B-2288": 0.0033,
-        "other": 0.0005
+        "B-2293": 0.995,
+        "B-2288": 0.0043,
+        "other": 0.0007
       },
       "options": [
         {
           "action": "gather batch_registry",
-          "expected_cost_gbp": 0.36,
+          "expected_cost_gbp": 0.39,
           "exposure": {},
-          "fee_gbp": 0.36
+          "fee_gbp": 0.39
         },
         {
           "action": "gather batch_registry+shipment_ledger",
-          "expected_cost_gbp": 0.76,
+          "expected_cost_gbp": 0.79,
           "exposure": {},
-          "fee_gbp": 0.76
+          "fee_gbp": 0.79
         },
         {
           "action": "gather shipment_ledger",
-          "expected_cost_gbp": 1.13,
+          "expected_cost_gbp": 1.47,
           "exposure": {},
-          "fee_gbp": 1.13
+          "fee_gbp": 1.47
         },
         {
           "action": "commit B-2293 -> C-04-03",
-          "expected_cost_gbp": 6.91,
+          "expected_cost_gbp": 9.02,
           "exposure": {
-            "expired_unit": 0.141,
-            "misattribution_unit": 0.131,
-            "wrong_zone": 0.003
+            "expired_unit": 0.184,
+            "misattribution_unit": 0.171,
+            "wrong_zone": 0.004
           },
           "fee_gbp": 0.0
         },
@@ -82,31 +82,31 @@
         },
         {
           "action": "segregate -> H-01-01",
-          "expected_cost_gbp": 19.46,
+          "expected_cost_gbp": 19.65,
           "exposure": {
-            "shelf_waste_unit_day": 557.878,
+            "shelf_waste_unit_day": 557.227,
             "wrong_zone": 0.999,
-            "expired_unit": 0.01,
+            "expired_unit": 0.014,
             "deferred_review": 1.0,
-            "misattribution_unit": 0.152
+            "misattribution_unit": 0.198
           },
           "fee_gbp": 0.0
         },
         {
           "action": "commit B-2288 -> A-07-02",
-          "expected_cost_gbp": 52.44,
+          "expected_cost_gbp": 52.54,
           "exposure": {
-            "shelf_waste_unit_day": 557.878,
-            "misattribution_unit": 39.848,
-            "wrong_zone": 0.996,
-            "expired_unit": 0.01
+            "shelf_waste_unit_day": 557.227,
+            "misattribution_unit": 39.802,
+            "wrong_zone": 0.995,
+            "expired_unit": 0.014
           },
           "fee_gbp": 0.0
         }
       ],
       "chosen": "gather batch_registry",
       "margin_gbp": 0.4,
-      "margin_share": 1.1136,
+      "margin_share": 1.0318,
       "fragile": false,
       "sensitivity": []
     },
@@ -120,9 +120,9 @@
       "options": [
         {
           "action": "commit B-2293 -> C-04-03",
-          "expected_cost_gbp": 0.06,
+          "expected_cost_gbp": 0.09,
           "exposure": {
-            "expired_unit": 0.001,
+            "expired_unit": 0.002,
             "misattribution_unit": 0.0,
             "wrong_zone": 0.0
           },
@@ -139,44 +139,44 @@
         },
         {
           "action": "segregate -> H-01-01",
-          "expected_cost_gbp": 18.91,
+          "expected_cost_gbp": 18.94,
           "exposure": {
-            "shelf_waste_unit_day": 559.967,
+            "shelf_waste_unit_day": 559.952,
             "wrong_zone": 1.0,
-            "expired_unit": 0.001,
+            "expired_unit": 0.002,
             "deferred_review": 1.0,
-            "misattribution_unit": 0.002
+            "misattribution_unit": 0.003
           },
           "fee_gbp": 0.0
         },
         {
           "action": "commit B-2288 -> A-07-02",
-          "expected_cost_gbp": 52.19,
+          "expected_cost_gbp": 52.21,
           "exposure": {
-            "shelf_waste_unit_day": 559.967,
-            "misattribution_unit": 39.998,
+            "shelf_waste_unit_day": 559.952,
+            "misattribution_unit": 39.997,
             "wrong_zone": 1.0,
-            "expired_unit": 0.001
+            "expired_unit": 0.002
           },
           "fee_gbp": 0.0
         }
       ],
       "chosen": "commit B-2293 -> C-04-03",
-      "margin_gbp": 18.07,
-      "margin_share": 305.2983,
+      "margin_gbp": 18.05,
+      "margin_share": 205.8083,
       "fragile": false,
       "sensitivity": [
         {
           "parameter": "misattribution_unit",
           "now_gbp": 0.96,
-          "flips_at_gbp": 130685.91,
-          "slack_x": 136131.2
+          "flips_at_gbp": 89312.18,
+          "slack_x": 93033.5
         },
         {
           "parameter": "wrong_zone",
           "now_gbp": 2.13,
-          "flips_at_gbp": 5227400.03,
-          "slack_x": 2450343.8
+          "flips_at_gbp": 3572450.79,
+          "slack_x": 1674586.3
         }
       ]
     }

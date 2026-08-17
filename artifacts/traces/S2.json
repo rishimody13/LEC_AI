@@ -33,33 +33,33 @@
     {
       "name": "who to believe",
       "belief": {
-        "B-2293": 0.998,
-        "other": 0.002
+        "B-2293": 0.9976,
+        "other": 0.0024
       },
       "options": [
         {
           "action": "gather batch_registry",
-          "expected_cost_gbp": 0.48,
+          "expected_cost_gbp": 0.54,
           "exposure": {},
-          "fee_gbp": 0.48
+          "fee_gbp": 0.54
         },
         {
           "action": "gather shipment_ledger",
-          "expected_cost_gbp": 0.58,
+          "expected_cost_gbp": 0.64,
           "exposure": {},
-          "fee_gbp": 0.58
+          "fee_gbp": 0.64
         },
         {
           "action": "gather batch_registry+shipment_ledger",
-          "expected_cost_gbp": 0.88,
+          "expected_cost_gbp": 0.94,
           "exposure": {},
-          "fee_gbp": 0.88
+          "fee_gbp": 0.94
         },
         {
           "action": "commit B-2293 -> C-04-03",
-          "expected_cost_gbp": 1.67,
+          "expected_cost_gbp": 2.02,
           "exposure": {
-            "expired_unit": 0.035
+            "expired_unit": 0.042
           },
           "fee_gbp": 0.0
         },
@@ -74,35 +74,35 @@
         },
         {
           "action": "segregate -> H-01-01",
-          "expected_cost_gbp": 19.12,
+          "expected_cost_gbp": 19.48,
           "exposure": {
-            "shelf_waste_unit_day": 489.026,
+            "shelf_waste_unit_day": 488.824,
             "wrong_zone": 0.998,
-            "expired_unit": 0.035,
+            "expired_unit": 0.042,
             "deferred_review": 1.0,
-            "misattribution_unit": 0.07
+            "misattribution_unit": 0.084
           },
           "fee_gbp": 0.0
         }
       ],
       "chosen": "gather batch_registry",
       "margin_gbp": 0.1,
-      "margin_share": 0.2101,
+      "margin_share": 0.1859,
       "fragile": false,
       "sensitivity": []
     },
     {
       "name": "where it goes",
       "belief": {
-        "B-2293": 0.9998,
-        "other": 0.0002
+        "B-2293": 0.9997,
+        "other": 0.0003
       },
       "options": [
         {
           "action": "commit B-2293 -> C-04-03",
-          "expected_cost_gbp": 0.18,
+          "expected_cost_gbp": 0.24,
           "exposure": {
-            "expired_unit": 0.004
+            "expired_unit": 0.005
           },
           "fee_gbp": 0.0
         },
@@ -117,20 +117,20 @@
         },
         {
           "action": "segregate -> H-01-01",
-          "expected_cost_gbp": 17.59,
+          "expected_cost_gbp": 17.65,
           "exposure": {
-            "shelf_waste_unit_day": 489.897,
+            "shelf_waste_unit_day": 489.861,
             "wrong_zone": 1.0,
-            "expired_unit": 0.004,
+            "expired_unit": 0.005,
             "deferred_review": 1.0,
-            "misattribution_unit": 0.007
+            "misattribution_unit": 0.01
           },
           "fee_gbp": 0.0
         }
       ],
       "chosen": "commit B-2293 -> C-04-03",
-      "margin_gbp": 16.76,
-      "margin_share": 95.1758,
+      "margin_gbp": 16.7,
+      "margin_share": 70.1553,
       "fragile": false,
       "sensitivity": []
     }

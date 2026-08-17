@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from datetime import date
 from typing import Protocol
 
@@ -176,15 +177,28 @@ class AlwaysSegregate:
 
 @dataclass
 class Oracle:
-    """Knows the answer. Not runnable - it is the floor for everything else."""
+    """Knows the answer. Not runnable - it is the floor for everything else.
+
+    It takes the batch's date and bin from `facts` rather than from the
+    catalogue, because the catalogue is sometimes unavailable and an oracle that
+    inherits that outage is not a floor. An earlier version looked the batch up
+    like everyone else, so when the warehouse system was down it filed stock with
+    the right batch and *no date* - unpickable, and charged as a loss. That made
+    the floor look worse than it is and flattered every comparison against it.
+    """
 
     truth: dict[str, str]
+    facts: dict[str, tuple[date, str]] = dataclass_field(default_factory=dict)
     name: str = "oracle"
 
     def decide(
         self, intake: ReturnIntake, services: loop.Services, costs: CostModel, rel: ReliabilityModel
     ) -> Decision:
         batch = self.truth[intake.return_id]
-        catalogue = services.batch_catalogue(intake.sku_id)
-        best_before, home_bin = _summary(catalogue, batch)
+        known = self.facts.get(batch)
+        if known is None:
+            catalogue = services.batch_catalogue(intake.sku_id)
+            best_before, home_bin = _summary(catalogue, batch)
+        else:
+            best_before, home_bin = known
         return Decision(batch_id=batch, bin_id=home_bin, best_before=best_before, confidence=1.0)

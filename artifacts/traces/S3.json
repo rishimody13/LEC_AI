@@ -46,10 +46,10 @@
     {
       "name": "who to believe",
       "belief": {
-        "B-2288": 0.2665,
-        "B-2293": 0.3926,
-        "B-2296": 0.2237,
-        "other": 0.1173
+        "B-2288": 0.2655,
+        "B-2293": 0.3911,
+        "B-2296": 0.2228,
+        "other": 0.1206
       },
       "options": [
         {
@@ -81,44 +81,44 @@
         },
         {
           "action": "commit B-2288 -> A-07-02",
-          "expected_cost_gbp": 216.38,
+          "expected_cost_gbp": 220.97,
           "exposure": {
-            "shelf_waste_unit_day": 517.658,
-            "misattribution_unit": 36.976,
-            "wrong_zone": 0.616,
-            "expired_unit": 3.518
+            "shelf_waste_unit_day": 515.715,
+            "misattribution_unit": 36.837,
+            "wrong_zone": 0.614,
+            "expired_unit": 3.617
           },
           "fee_gbp": 0.0
         },
         {
           "action": "segregate -> H-01-01",
-          "expected_cost_gbp": 221.56,
+          "expected_cost_gbp": 226.37,
           "exposure": {
-            "wrong_zone": 0.883,
-            "shelf_waste_unit_day": 517.658,
-            "expired_unit": 3.518,
+            "wrong_zone": 0.879,
+            "shelf_waste_unit_day": 515.715,
+            "expired_unit": 3.617,
             "deferred_review": 1.0,
-            "misattribution_unit": 36.444
+            "misattribution_unit": 36.533
           },
           "fee_gbp": 0.0
         },
         {
           "action": "commit B-2293 -> C-04-03",
-          "expected_cost_gbp": 965.61,
+          "expected_cost_gbp": 967.39,
           "exposure": {
-            "expired_unit": 19.507,
-            "misattribution_unit": 29.409,
-            "wrong_zone": 0.49
+            "expired_unit": 19.546,
+            "misattribution_unit": 29.299,
+            "wrong_zone": 0.488
           },
           "fee_gbp": 0.0
         },
         {
           "action": "commit B-2296 -> A-07-08",
-          "expected_cost_gbp": 2106.38,
+          "expected_cost_gbp": 2103.88,
           "exposure": {
-            "expired_unit": 43.063,
-            "misattribution_unit": 39.545,
-            "wrong_zone": 0.659
+            "expired_unit": 43.014,
+            "misattribution_unit": 39.397,
+            "wrong_zone": 0.657
           },
           "fee_gbp": 0.0
         }

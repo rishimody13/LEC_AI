@@ -98,9 +98,14 @@ def _normalise(log_weights: dict[str, float]) -> dict[str, float]:
 #: value is measured on generated cases and checked on seed ranges that played no
 #: part in choosing it. On 4,000 fresh cases anything from 0.97 down to 0.90 is
 #: indistinguishable - the costs differ by under £1 a return against a 95%
-#: interval of about £15 - and every one of them beats 1.0, which leaves three
-#: times as many unit-days of expiry on the dangerous side. 0.95 is the smallest
-#: correction the evidence supports, so it is the one taken.
+#: interval of about £15 - and every one of them beats 1.0, which costs £77.60 a
+#: return against £56.11 and leaves three times as many unit-days of expiry on
+#: the dangerous side. 0.95 is the smallest correction the evidence supports, so
+#: it is the one taken. Reproduce with `python -m harness.calibration --sweep`.
+#:
+#: It does not fix the agent's calibration, and should not be described as
+#: doing so: conditional on committing it is still about twice as confident as
+#: it should be. What it changes is which action wins.
 #:
 #: Do not read it as a precise number. It is the middle of a band, and the band
 #: is what the measurement actually establishes. See status.md, "is the agent

@@ -36,9 +36,9 @@
       "options": [
         {
           "action": "commit B-2293 -> C-04-03",
-          "expected_cost_gbp": 0.02,
+          "expected_cost_gbp": 0.03,
           "exposure": {
-            "expired_unit": 0.0
+            "expired_unit": 0.001
           },
           "fee_gbp": 0.0
         },
@@ -71,11 +71,11 @@
         },
         {
           "action": "segregate -> H-01-01",
-          "expected_cost_gbp": 18.88,
+          "expected_cost_gbp": 18.89,
           "exposure": {
-            "shelf_waste_unit_day": 559.989,
+            "shelf_waste_unit_day": 559.984,
             "wrong_zone": 1.0,
-            "expired_unit": 0.0,
+            "expired_unit": 0.001,
             "deferred_review": 1.0,
             "misattribution_unit": 0.001
           },
@@ -84,14 +84,14 @@
       ],
       "chosen": "commit B-2293 -> C-04-03",
       "margin_gbp": 0.28,
-      "margin_share": 15.3955,
+      "margin_share": 9.8111,
       "fragile": false,
       "sensitivity": [
         {
           "parameter": "expired_unit",
           "now_gbp": 48.0,
-          "flips_at_gbp": 786.98,
-          "slack_x": 16.4
+          "flips_at_gbp": 518.93,
+          "slack_x": 10.8
         }
       ]
     },
@@ -104,9 +104,9 @@
       "options": [
         {
           "action": "commit B-2293 -> C-04-03",
-          "expected_cost_gbp": 0.02,
+          "expected_cost_gbp": 0.03,
           "exposure": {
-            "expired_unit": 0.0
+            "expired_unit": 0.001
           },
           "fee_gbp": 0.0
         },
@@ -121,11 +121,11 @@
         },
         {
           "action": "segregate -> H-01-01",
-          "expected_cost_gbp": 18.88,
+          "expected_cost_gbp": 18.89,
           "exposure": {
-            "shelf_waste_unit_day": 559.989,
+            "shelf_waste_unit_day": 559.984,
             "wrong_zone": 1.0,
-            "expired_unit": 0.0,
+            "expired_unit": 0.001,
             "deferred_review": 1.0,
             "misattribution_unit": 0.001
           },
@@ -134,7 +134,7 @@
       ],
       "chosen": "commit B-2293 -> C-04-03",
       "margin_gbp": 18.11,
-      "margin_share": 983.6523,
+      "margin_share": 645.3515,
       "fragile": false,
       "sensitivity": []
     }

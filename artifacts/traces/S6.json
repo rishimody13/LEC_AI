@@ -33,10 +33,10 @@
     {
       "name": "who to believe",
       "belief": {
-        "B-2290": 0.23,
-        "B-2291": 0.7076,
-        "B-2293": 0.0397,
-        "B-2296": 0.0226,
+        "B-2290": 0.2281,
+        "B-2291": 0.7017,
+        "B-2293": 0.0446,
+        "B-2296": 0.0254,
         "other": 0.0002
       },
       "options": [
@@ -69,53 +69,53 @@
         },
         {
           "action": "commit B-2290 -> A-07-05",
-          "expected_cost_gbp": 23.94,
+          "expected_cost_gbp": 24.05,
           "exposure": {
-            "misattribution_unit": 23.096,
-            "wrong_zone": 0.77,
-            "expired_unit": 0.003
+            "misattribution_unit": 23.151,
+            "wrong_zone": 0.772,
+            "expired_unit": 0.004
           },
           "fee_gbp": 0.0
         },
         {
           "action": "segregate -> H-01-01",
-          "expected_cost_gbp": 24.51,
+          "expected_cost_gbp": 24.72,
           "exposure": {
-            "shelf_waste_unit_day": 419.926,
+            "shelf_waste_unit_day": 419.897,
             "wrong_zone": 1.0,
-            "expired_unit": 0.003,
+            "expired_unit": 0.004,
             "deferred_review": 1.0,
-            "misattribution_unit": 8.772
+            "misattribution_unit": 8.949
           },
           "fee_gbp": 0.0
         },
         {
           "action": "commit B-2291 -> C-04-01",
-          "expected_cost_gbp": 340.32,
+          "expected_cost_gbp": 337.79,
           "exposure": {
-            "expired_unit": 6.902,
-            "misattribution_unit": 8.767,
-            "wrong_zone": 0.292
+            "expired_unit": 6.845,
+            "misattribution_unit": 8.941,
+            "wrong_zone": 0.298
           },
           "fee_gbp": 0.0
         },
         {
           "action": "commit B-2293 -> C-04-03",
-          "expected_cost_gbp": 1379.91,
+          "expected_cost_gbp": 1368.58,
           "exposure": {
-            "expired_unit": 28.129,
-            "misattribution_unit": 28.805,
-            "wrong_zone": 0.96
+            "expired_unit": 27.896,
+            "misattribution_unit": 28.655,
+            "wrong_zone": 0.955
           },
           "fee_gbp": 0.0
         },
         {
           "action": "commit B-2296 -> A-07-08",
-          "expected_cost_gbp": 1437.56,
+          "expected_cost_gbp": 1433.38,
           "exposure": {
-            "expired_unit": 29.319,
-            "misattribution_unit": 29.317,
-            "wrong_zone": 0.977
+            "expired_unit": 29.234,
+            "misattribution_unit": 29.231,
+            "wrong_zone": 0.974
           },
           "fee_gbp": 0.0
         }
